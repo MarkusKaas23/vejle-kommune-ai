@@ -1,0 +1,5 @@
+# Split "Async batch" into Async transform and Async analyze
+
+The original taxonomy lumped translation and accessibility audit under one "Async batch" Pattern because both iterate over many nodes off the editor's critical path. We split them. Translation is **Async transform** (AI mutates the CMS — translated nodes appear in the content tree, rollback = unpublish/delete). Accessibility audit is **Async analyze** (AI emits findings alongside the CMS — the tree is unchanged until a human acts, rollback = dismiss).
+
+The two differ in three architecturally meaningful ways: output target (mutates content vs. annotates content), review workflow (publish-the-output vs. fix-the-original), and rollback semantics (destructive vs. trivial). Collapsing them would hide the rollback-asymmetry argument that the thesis needs to make about Pattern trade-offs. The cost is one extra Pattern to implement and evaluate; the benefit is a defensible taxonomy that an examiner familiar with annotation/audit systems would not be able to puncture.

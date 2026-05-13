@@ -1,0 +1,7 @@
+# Implementation depth and corpus strategy per Pattern
+
+Each Pattern is implemented at one of three depths: **L1** (console/harness only), **L2** (editor-usable in the Umbraco backoffice with full telemetry), or **L3** (production-shaped — out of thesis scope). The default is L2. **Agent tool** is L1-only because a backoffice UX for an LLM with CMS write access is a safety and scope problem on its own; the Pattern chapter argues viability under controlled conditions and names its L2 blockers explicitly (auth scope, approval gates, rollback UX). **Async transform** and **Async analyze** are L2 plus an L1 harness against a synthetic corpus, because honest Latency/Cost numbers need a corpus larger than the demo vehicle can supply (~100 nodes minimum for translation).
+
+The synthetic corpus is built by scraping publicly available vejle.dk content using a small .NET + HtmlAgilityPack script and citing the source. This is preferred over pure-synthetic Danish (would measure the author's prose style, not municipal Danish) and over arbitrary kommune.dk scraping (less coherent, weaker provenance story). Corpus authoring stays inside a day's work. Optional stretch: outreach to Vejle Kommune's digitalisering team for a content export or blessing — adds legitimacy but not load-bearing.
+
+L3 concerns are deliberately named-but-not-implemented per Pattern. This is the thesis's research boundary, not a cop-out: the contribution is "the Pattern's shape and trade-offs," not "production-readiness."

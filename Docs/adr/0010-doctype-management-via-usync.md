@@ -1,0 +1,3 @@
+# Doctype management via uSync
+
+Doctype, composition, and data-type definitions are managed via **uSync** — exported to YAML under a `uSync/` folder that is committed to git. Chosen over Umbraco Deploy schema-on-disk (newer in U17 but less battle-tested across packages) and hand-rolled `IComposer` + `ContentTypeService` (most control, most code, no benefit during early iteration). uSync is the community standard, well-documented for Umbraco 17, and survives backoffice edits without custom code — important during early content-model iteration when the doctype taxonomy from ADR-0006 may need refinement once Patterns start landing on it.

@@ -1,0 +1,9 @@
+# PII handling: kill switch + synthetic-corpus demo + Option A as design sketch
+
+PII risk is classified per Pattern (1 none / 4 possible / 3 likely) and the codebase ships **Option C + D**: a per-Pattern kill switch in **SiteSettings**, the synthetic public-vejle.dk corpus from ADR-0004 as the demo data (PII-free by construction), and **Option A** (provider routing to a DPA-backed provider like Azure OpenAI EU) discussed architecturally in each "likely" Pattern chapter without being implemented. **Option B** (regex / NER pre-call redaction) is explicitly rejected: Danish NER for names and addresses is brittle enough that a redactor would give false confidence, and CPR-regex alone is not a complete mitigation — better to be honest about the gap than to ship security theatre.
+
+Every outbound AI call also writes an **AI call audit record** to the telemetry pipeline: `{patternName, nodeId, providerName, contentLengthChars, latencyMs, costUsd, timestampUtc}` — metadata only, never content. This is the minimum a real kommune DPO would require and costs ~5 lines per call site inside the existing telemetry pipeline (Phase 0+1).
+
+**Per-Pattern PII flag values:** Schema enrichment = **none** (operates on doctype metadata only). Sync suggestion (SEO), Sync suggestion (alt text), Gate / validator, Async analyze = **possible**. Async transform, Generative pipeline, Agent tool = **likely**. The Async analyze chapter's mitigation note must specifically address that the input surface is rendered HTML (wider than a single property value but composed entirely of already-published content — PII shouldn't be present upstream).
+
+The thesis claim is honest: *"In production, Patterns flagged 'likely' require provider routing per Option A. In the thesis demo, this risk is bypassed by the synthetic public-content corpus. The codebase ships a per-Pattern kill switch sufficient for a controlled demo environment."*
