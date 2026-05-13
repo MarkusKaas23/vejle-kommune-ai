@@ -1,9 +1,12 @@
+using uSync.BackOffice;
+
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 builder.CreateUmbracoBuilder()
     .AddBackOffice()
     .AddWebsite()
     .AddComposers()
+    .AdduSync()
     .Build();
 
 WebApplication app = builder.Build();
