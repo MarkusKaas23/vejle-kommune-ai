@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Umbraco.Cms.Core.Composing;
 using Umbraco.Cms.Core.DependencyInjection;
 
@@ -12,6 +13,23 @@ public sealed class AiComposer : IComposer
             .AddOptions<GeminiOptions>()
             .BindConfiguration(GeminiOptions.SectionName);
 
-        builder.Services.AddHttpClient<IAiProvider, GeminiProvider>();
+        builder.Services.TryAddSingletonTimeProvider();
+        builder.Services.AddSingleton<IAiCallAuditSink, LoggerAiCallAuditSink>();
+        builder.Services.AddHttpClient<GeminiProvider>();
+
+        builder.Services.AddTransient<IAiProvider>(sp =>
+            new AuditingAiProvider(
+                sp.GetRequiredService<GeminiProvider>(),
+                sp.GetRequiredService<IAiCallAuditSink>(),
+                sp.GetRequiredService<TimeProvider>()));
+    }
+}
+
+internal static class TimeProviderRegistration
+{
+    public static IServiceCollection TryAddSingletonTimeProvider(this IServiceCollection services)
+    {
+        services.TryAddSingleton(TimeProvider.System);
+        return services;
     }
 }
