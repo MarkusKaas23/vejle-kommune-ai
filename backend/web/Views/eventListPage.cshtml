@@ -1,0 +1,11 @@
+﻿@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage
+<section>
+    <h1>@(Model.Value<string>("headline") ?? Model.Name)</h1>
+    <p>@Model.Value("introText")</p>
+</section>
+<ul>
+    @foreach (var child in Model.Children?.Where(c => c.IsPublished()) ?? Enumerable.Empty<IPublishedContent>())
+    {
+        <li><a href="@child.Url()">@child.Name</a></li>
+    }
+</ul>

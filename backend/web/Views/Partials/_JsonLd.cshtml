@@ -1,0 +1,3 @@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage
+@inject VejleKommune.Code.Features.Seo.SchemaOrgRenderer Renderer
+@Html.Raw(Renderer.RenderJsonLd(Model))

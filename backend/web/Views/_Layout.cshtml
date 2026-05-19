@@ -1,0 +1,30 @@
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage
+@{
+    var title = Model.HasProperty("metaTitle") ? Model.Value<string>("metaTitle") : null;
+    if (string.IsNullOrWhiteSpace(title)) title = Model.Name;
+    var description = Model.HasProperty("metaDescription") ? Model.Value<string>("metaDescription") : null;
+}
+<!DOCTYPE html>
+<html lang="da">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@title</title>
+    @if (!string.IsNullOrWhiteSpace(description))
+    {
+        <meta name="description" content="@description" />
+    }
+    @await Html.PartialAsync("_JsonLd")
+</head>
+<body>
+    <header>
+        <a href="/">Vejle Kommune</a>
+    </header>
+    <main>
+        @RenderBody()
+    </main>
+    <footer>
+        <small>© Vejle Kommune – demo for thesis Pattern catalogue</small>
+    </footer>
+</body>
+</html>

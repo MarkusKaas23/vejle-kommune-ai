@@ -35,8 +35,9 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <RootNamespace>VejleKommune</RootNamespace>
-    <AssemblyName>VejleKommune</AssemblyName>
-  </PropertyGroup>
+  <AssemblyName>VejleKommune</AssemblyName>
+  <RootNamespace>VejleKommune</RootNamespace>
+  <UserSecretsId>vejle-kommune-ai</UserSecretsId>
+</PropertyGroup>
 
 </Project>

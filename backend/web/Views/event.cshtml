@@ -1,0 +1,11 @@
+﻿@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage
+<article>
+    <h1>@(Model.Value<string>("headline") ?? Model.Name)</h1>
+    @{ var start = Model.Value<DateTime?>("startDate"); var end = Model.Value<DateTime?>("endDate"); }
+    @if (start.HasValue)
+    {
+        <p><time datetime="@start.Value.ToString("o")">@start.Value.ToString("d. MMMM yyyy HH:mm")</time>@(end.HasValue ? " – " + end.Value.ToString("HH:mm") : "")</p>
+    }
+    <p>Sted: @Model.Value("location")</p>
+    @Html.Raw(Model.Value("body"))
+</article>

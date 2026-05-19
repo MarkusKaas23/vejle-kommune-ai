@@ -1,0 +1,11 @@
+﻿@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage
+<article>
+    <h1>@(Model.Value<string>("headline") ?? Model.Name)</h1>
+    <p><strong>@Model.Value("summary")</strong></p>
+    @Html.Raw(Model.Value("body"))
+    @{ var links = Model.Value<string>("selfServiceLinks"); }
+    @if (!string.IsNullOrWhiteSpace(links))
+    {
+        <aside><h2>Selvbetjening</h2><p>@links</p></aside>
+    }
+</article>

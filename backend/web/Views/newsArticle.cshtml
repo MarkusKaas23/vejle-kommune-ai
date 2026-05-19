@@ -1,0 +1,11 @@
+﻿@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage
+<article>
+    <h1>@(Model.Value<string>("headline") ?? Model.Name)</h1>
+    @{ var published = Model.Value<DateTime?>("publishedDate"); }
+    @if (published.HasValue)
+    {
+        <time datetime="@published.Value.ToString("o")">@published.Value.ToString("d. MMMM yyyy")</time>
+    }
+    <p><strong>@Model.Value("summary")</strong></p>
+    @Html.Raw(Model.Value("body"))
+</article>

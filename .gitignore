@@ -430,7 +430,10 @@ FodyWeavers.xsd
 
 # Umbraco
 appsettings.Development.json
-umbraco/Data/
+**/umbraco/Data/
+**/umbraco/Logs/
+**/umbraco/cache/
+**/umbraco/mediacache/
 *.db
 *.db-shm
 *.db-wal
