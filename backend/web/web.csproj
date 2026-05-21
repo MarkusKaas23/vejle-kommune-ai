@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.8" />
+    <PackageReference Include="SeoToolkit.Umbraco.MetaFields" Version="6.3.0" />
     <PackageReference Include="Umbraco.Cms" Version="17.0.0" />
     <PackageReference Include="Umbraco.Cms.DevelopmentMode.Backoffice" Version="17.0.0" />
     <PackageReference Include="uSync" Version="17.3.1" />
