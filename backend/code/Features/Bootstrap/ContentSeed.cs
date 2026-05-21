@@ -32,7 +32,7 @@ internal static class ContentSeed
             c.SetValue("headline", "Velkommen til Vejle Kommune", Da);
             c.SetValue("introText", "Vejle Kommune leverer service, information og digitale løsninger til borgere og virksomheder i Vejle, Egtved, Give, Jelling og Børkop.", Da);
             c.SetValue("metaTitle", "Vejle Kommune", Da);
-            c.SetValue("metaDescription", "Officielt website for Vejle Kommune – nyheder, selvbetjening og kontakt.", Da);
+            c.SetValue("seoMetaDescription", "Officielt website for Vejle Kommune – nyheder, selvbetjening og kontakt.", Da);
         });
 
         var newsList = CreatePublic(contentService, "Nyheder", home.Id, DoctypeKeys.NewsListPageAlias, c =>
@@ -40,7 +40,7 @@ internal static class ContentSeed
             c.SetValue("headline", "Nyheder fra Vejle Kommune", Da);
             c.SetValue("introText", "Seneste nyt fra kommunen.", Da);
             c.SetValue("metaTitle", "Nyheder – Vejle Kommune", Da);
-            c.SetValue("metaDescription", "Læs de seneste nyheder fra Vejle Kommune.", Da);
+            c.SetValue("seoMetaDescription", "Læs de seneste nyheder fra Vejle Kommune.", Da);
         });
 
         var newsTitles = new[]
@@ -61,7 +61,7 @@ internal static class ContentSeed
                 c.SetValue("summary", summary, Da);
                 c.SetValue("body", $"<p>{summary}</p><p>Læs mere på Vejle Kommunes website.</p>", Da);
                 c.SetValue("metaTitle", $"{title} – Vejle Kommune", Da);
-                c.SetValue("metaDescription", summary, Da);
+                c.SetValue("seoMetaDescription", summary, Da);
             });
         }
 
@@ -70,7 +70,7 @@ internal static class ContentSeed
             c.SetValue("headline", "Begivenheder i Vejle Kommune", Da);
             c.SetValue("introText", "Kommende arrangementer.", Da);
             c.SetValue("metaTitle", "Begivenheder – Vejle Kommune", Da);
-            c.SetValue("metaDescription", "Se kommende arrangementer og begivenheder i Vejle Kommune.", Da);
+            c.SetValue("seoMetaDescription", "Se kommende arrangementer og begivenheder i Vejle Kommune.", Da);
         });
 
         var events = new[]
@@ -89,7 +89,7 @@ internal static class ContentSeed
                 c.SetValue("location", location, Da);
                 c.SetValue("body", $"<p>Deltag i {title.ToLowerInvariant()}. Sted: {location}.</p>", Da);
                 c.SetValue("metaTitle", $"{title} – Vejle Kommune", Da);
-                c.SetValue("metaDescription", $"{title}. Sted: {location}.", Da);
+                c.SetValue("seoMetaDescription", $"{title}. Sted: {location}.", Da);
             });
         }
 
@@ -110,7 +110,7 @@ internal static class ContentSeed
                 c.SetValue("body", $"<p>{summary} Læs mere om vores service og selvbetjeningsmuligheder.</p>", Da);
                 c.SetValue("selfServiceLinks", "Bestil tid · Find selvbetjening · Se ventetider", Da);
                 c.SetValue("metaTitle", $"{title} – Vejle Kommune", Da);
-                c.SetValue("metaDescription", summary, Da);
+                c.SetValue("seoMetaDescription", summary, Da);
             });
         }
 
@@ -127,7 +127,7 @@ internal static class ContentSeed
                 c.SetValue("headline", title, Da);
                 c.SetValue("body", $"<p>{summary}</p>", Da);
                 c.SetValue("metaTitle", $"{title} – Vejle Kommune", Da);
-                c.SetValue("metaDescription", summary, Da);
+                c.SetValue("seoMetaDescription", summary, Da);
             });
         }
 

@@ -1,5 +1,10 @@
 using uSync.BackOffice;
 
+// Set DataDirectory so SQLite path resolves before Umbraco's first DB check fires.
+AppDomain.CurrentDomain.SetData(
+    "DataDirectory",
+    Path.Combine(Directory.GetCurrentDirectory(), "umbraco", "Data"));
+
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 builder.CreateUmbracoBuilder()

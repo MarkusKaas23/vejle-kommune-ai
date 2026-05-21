@@ -119,7 +119,7 @@ public sealed class SchemaOrgRenderer
         var obj = NewSchemaObject("WebSite", url);
         obj["name"] = page.Name;
         obj["inLanguage"] = inLanguage;
-        var description = Str(page, "metaDescription") ?? Str(page, "introText");
+        var description = Str(page, "seoMetaDescription") ?? Str(page, "introText");
         if (!string.IsNullOrWhiteSpace(description))
             obj["description"] = description;
         return obj;
@@ -140,7 +140,7 @@ public sealed class SchemaOrgRenderer
         obj["headline"] = Str(page, "headline") ?? page.Name ?? string.Empty;
         obj["inLanguage"] = inLanguage;
 
-        var summary = Str(page, "summary") ?? Str(page, "metaDescription");
+        var summary = Str(page, "summary") ?? Str(page, "seoMetaDescription");
         if (!string.IsNullOrWhiteSpace(summary))
             obj["description"] = summary;
 
@@ -156,7 +156,7 @@ public sealed class SchemaOrgRenderer
         var obj = NewSchemaObject("CollectionPage", url);
         obj["name"] = Str(page, "headline") ?? page.Name ?? string.Empty;
         obj["inLanguage"] = inLanguage;
-        var description = Str(page, "introText") ?? Str(page, "metaDescription");
+        var description = Str(page, "introText") ?? Str(page, "seoMetaDescription");
         if (!string.IsNullOrWhiteSpace(description))
             obj["description"] = description;
         return obj;
@@ -194,7 +194,7 @@ public sealed class SchemaOrgRenderer
         obj["name"] = Str(page, "headline") ?? page.Name ?? string.Empty;
         obj["inLanguage"] = inLanguage;
 
-        var description = Str(page, "summary") ?? Str(page, "metaDescription");
+        var description = Str(page, "summary") ?? Str(page, "seoMetaDescription");
         if (!string.IsNullOrWhiteSpace(description))
             obj["description"] = description;
 
@@ -212,7 +212,7 @@ public sealed class SchemaOrgRenderer
         obj["name"] = Str(page, "headline") ?? page.Name ?? string.Empty;
         obj["inLanguage"] = inLanguage;
 
-        var description = Str(page, "metaDescription");
+        var description = Str(page, "seoMetaDescription");
         if (!string.IsNullOrWhiteSpace(description))
             obj["description"] = description;
         return obj;

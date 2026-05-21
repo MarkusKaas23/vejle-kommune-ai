@@ -49,17 +49,17 @@ public sealed class DoctypeBootstrapNotificationHandler : INotificationAsyncHand
         {
             _logger.LogInformation("Doctype bootstrap starting");
 
-            var dataTypes = await DataTypeLookup.ResolveAsync(_dataTypeService);
-            var templates = TemplateFactory.CreateAll(_templateService, _shortStringHelper);
+            ResolvedDataTypes dataTypes = await DataTypeLookup.ResolveAsync(_dataTypeService);
+            ResolvedTemplates templates = TemplateFactory.CreateAll(_templateService, _shortStringHelper);
 
-            var compositions = await CompositionFactory.CreateAllAsync(_contentTypeService, _shortStringHelper, dataTypes);
+            ResolvedCompositions compositions = await CompositionFactory.CreateAllAsync(_contentTypeService, _shortStringHelper, dataTypes);
             await DoctypeFactory.CreateAllAsync(_contentTypeService, _shortStringHelper, dataTypes, compositions, templates);
             await MediaTypeFactory.CreateAllAsync(_mediaTypeService, _shortStringHelper, dataTypes);
 
             _logger.LogInformation("Doctype bootstrap complete");
         }
 
-        var seeded = ContentSeed.SeedIfEmpty(_contentService, _contentTypeService, _logger);
+        bool seeded = ContentSeed.SeedIfEmpty(_contentService, _contentTypeService, _logger);
 
         if (seeded)
         {

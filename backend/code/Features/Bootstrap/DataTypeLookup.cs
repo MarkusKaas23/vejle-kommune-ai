@@ -35,7 +35,7 @@ internal static class DataTypeLookup
 
     private static async Task<IDataType> GetSingleAsync(IDataTypeService dataTypeService, string editorAlias)
     {
-        var matches = (await dataTypeService.GetByEditorAliasAsync(editorAlias)).ToList();
+        List<IDataType> matches = (await dataTypeService.GetByEditorAliasAsync(editorAlias)).ToList();
         if (matches.Count == 0)
             throw new InvalidOperationException($"No built-in data type found for editor alias '{editorAlias}'. Umbraco install is incomplete.");
         return matches[0];
