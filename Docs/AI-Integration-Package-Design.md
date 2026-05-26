@@ -180,12 +180,44 @@ An editor (or automated trigger) queues an accessibility audit for a content nod
 
 ---
 
+## Pattern 6 — Generative Pipeline: Document → Content
+
+### What it does
+An editor uploads a raw document (PDF, Word, council minutes, press release). A background worker sends the document bytes to Gemini as multimodal `inline_data`, which extracts structured fields matching the `newsArticle` document type. A new unpublished draft node is created under the Nyheder list page for editorial review before publishing. The document is consumed as input and never stored in the CMS — only the resulting draft node lives in Umbraco.
+
+### Current implementation (L2)
+- `DocumentIngestionQueue`: singleton `Channel<DocumentIngestionJob>` + `ConcurrentDictionary` — same pattern as Translation and Accessibility.
+- `DocumentIngestionWorker`: `BackgroundService` that:
+  1. Resolves Nyheder parent node key → int ID (`contentService.GetById(NyhederKey).Id`)
+  2. Sends document bytes as `AiImage(bytes, mimeType)` via `AiRequest.Images` — reuses existing `GeminiProvider` `inline_data` path.
+  3. Gemini returns structured JSON: `headline`, `summary`, `body` (HTML), `publishedDate` (ISO-8601).
+  4. Creates `newsArticle` node with `contentService.Create(headline, parentId, "newsArticle")`.
+  5. `SetCultureName(headline, "da-DK")` — same critical step as Translation.
+  6. Writes culture-variant fields (`headline`, `summary`, `body` with rich-text envelope) and invariant `publishedDate`.
+  7. `contentService.Save()` — unpublished draft, editor reviews before publishing.
+- Endpoints: `POST /umbraco/api/vejle/ingest` → 202 + jobId, `GET /umbraco/api/vejle/ingest/{jobId}` → job state + `contentKey`.
+- **No DELETE endpoint** — the output is a CMS node; rollback is the standard backoffice operation (trash/delete the draft), not an in-memory dismiss.
+- `GeminiProvider` already supported PDF via `inline_data` + `"application/pdf"` MIME type — no changes to the AI abstraction layer were needed.
+
+### Rollback semantics
+Rollback = trash or delete the newly created draft node. The document bytes are never stored. This is the same rollback surface as Async Transform (Translation): the CMS is mutated, so there is no zero-cost dismiss — but the editor is always in control since the node is never auto-published.
+
+### Package design
+- **File upload widget** in a backoffice Document Content App or dedicated section — drag-and-drop, accepts PDF and DOCX, shows extraction progress, previews extracted fields before node creation.
+- **Field mapping preview** — show a diff-style comparison: left = extracted value, right = what will be written to which property. Editor can edit extracted values before confirming.
+- **Document type selector** — not just `newsArticle`; the package should support configurable field mapping for any document type.
+- **"Create draft" button** — only creates the node after editor confirms the extraction. Job state on completion includes a direct link to the new node in the backoffice.
+
+### Key implementation notes
+- `GeminiProvider.BuildRequestBody` attaches `inline_data` parts for each `AiImage` — PDFs work here natively because Gemini 2.5 Flash supports PDF as multimodal input alongside images.
+- Rich-text `body` field must be wrapped in `{"markup":"<html>"}` envelope — same `WrapMarkup` helper as TranslationWorker.
+- `publishedDate` is invariant (not culture-variant) per the `newsarticle.config` uSync definition — `SetValue("publishedDate", parsedDate)` without a culture argument.
+- The hint field (`DocumentIngestionRequest.Hint`) lets the caller pass editorial context (e.g. "Pressemeddelelse fra Teknik og Miljø") to the AI, improving extraction quality.
+- If Gemini cannot extract a meaningful headline (empty string), the job fails rather than creating a nameless node.
+
+---
+
 ## Planned Patterns (Not Yet Implemented)
-
-### Pattern 6 — Generative Pipeline: Document → Content
-A multi-step AI transform that takes an uploaded PDF/Word document (e.g., a press release, council minutes, policy paper) and produces a structured Umbraco content node. Steps: extract text → classify document type → extract structured fields → create draft node. No existing node is modified; the output is a new draft for editorial review.
-
-**Package design:** File upload widget in the backoffice, document type selector, field mapping preview (AI-extracted value → Umbraco property), "Create draft" button. The generated node is always unpublished.
 
 ### Pattern 7 — Agent Tool: MCP-Based Content Management
 The LLM is given tools via the Model Context Protocol (MCP) and can drive the CMS directly — read nodes, create nodes, publish, query content. Used for bulk operations or content migrations that are too complex to script but too risky to fully automate.
@@ -373,6 +405,7 @@ The **Open Core** model is worth considering for the BYOK tier: releasing `Limbo
 | Tone-of-voice gate | `INotificationAsyncHandler` | No UI — inline publish error message |
 | Translation panel | Document Content App | Language dropdown + status badge |
 | Accessibility panel | Document Content App | Findings list + dismiss |
+| Document ingestion | Custom section or Content App | Upload widget + field preview + draft creation |
 | Audit log | Custom Dashboard section | Table + CSV export |
 | Settings | Custom section or Settings tree node | Tone policy editor, provider config |
 
@@ -394,4 +427,4 @@ These are deliberately not implemented in the thesis demo but must be named for 
 
 ---
 
-*Last updated: Phase 6 (Async Analyze — Accessibility). Next: Phase 7 (Generative Pipeline).*
+*Last updated: Phase 7 (Generative Pipeline — Document → Content). Next: Phase 8 (Agent Tools — MCP).*
