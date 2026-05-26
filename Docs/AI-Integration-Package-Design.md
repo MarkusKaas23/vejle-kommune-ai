@@ -241,12 +241,40 @@ This pattern represents a different human-AI split than all previous patterns. I
 
 ---
 
-## Planned Patterns (Not Yet Implemented)
+## Pattern 7 — Agent Tool: MCP-Based Content Management
 
-### Pattern 7 — Agent Tool: MCP-Based Content Management
-The LLM is given tools via the Model Context Protocol (MCP) and can drive the CMS directly — read nodes, create nodes, publish, query content. Used for bulk operations or content migrations that are too complex to script but too risky to fully automate.
+### What it does
+An LLM is given typed tools via the Model Context Protocol (MCP) and can drive the CMS autonomously in a loop — list content, read nodes, search, create drafts — without a human typing individual requests. This is the most powerful and most architecturally risky pattern: the AI is no longer an assistant responding to prompts but an agent pursuing a goal across multiple CMS operations.
 
-**Package design:** MCP server exposing Umbraco management operations as tools. Each tool has an approval gate — the AI proposes an action, a human approves. Audit log captures every tool call. Scope is configurable per user/role.
+### Current implementation (L2 — L1 only per ADR-0012)
+- `AgentToolsController`: single `POST /umbraco/api/vejle/mcp` endpoint handling JSON-RPC 2.0.
+- Supported MCP methods: `initialize`, `tools/list`, `tools/call`.
+- `UmbracoMcpTools`: scoped service implementing four tools:
+  - `umbraco_list_content` — list child nodes under a path or root.
+  - `umbraco_get_content` — read all property values for a node by GUID key.
+  - `umbraco_search_content` — keyword search across published content (in-memory at L1; Examine/Lucene at L2).
+  - `umbraco_create_draft` — create an unpublished newsArticle draft (write operation, ⚠ no approval gate at L1).
+- `AgentToolsComposer`: registers `UmbracoMcpTools` as scoped (required because `IContentService` is scoped).
+- Harness: `Docs/agents/mcp-harness.md` — six-step curl script demonstrating the full agentic loop manually.
+
+### L2 blockers (named, not resolved — see ADR-0012)
+These are the safety constraints that prevent this pattern from being production-ready without significant additional engineering:
+
+- **Authentication and authorisation scope** — the current endpoint has no auth. An LLM acting as "admin" has write access to the entire content tree. L2 requires OAuth 2.0 bearer token validation and per-tool permission checks against the connecting user's Umbraco group.
+- **Approval gate on write operations** — at L1, `umbraco_create_draft` executes immediately. A production system must intercept write calls and present a backoffice approval dialog before execution. The LLM proposes; the human approves.
+- **Session-scoped undo log** — an autonomous agent may create many nodes before a problem is noticed. L2 needs a session undo log that can reverse all writes from a single agent run in one action.
+- **Prompt injection via content** — if an article's body text contains LLM instructions, those instructions enter the model's context when the agent reads that node. L2 requires a prompt injection filter on all read tool outputs.
+- **Context window management** — reading large content trees fills the LLM's context quickly. L2 requires field-level filtering, pagination, and a "summarise subtree" tool.
+
+### Package design
+- **MCP server as an optional Umbraco add-on** — the MCP endpoint is a standard ASP.NET controller; it can be added to any Umbraco 17+ site without modifying existing code.
+- **Tool scope configuration** — a backoffice settings page lets admins enable/disable individual tools per installation. A read-only deployment exposes only `list`, `get`, and `search`.
+- **Approval queue dashboard** — a dedicated backoffice section shows pending write operations proposed by the agent, each with a one-click approve/reject.
+- **Per-session audit trail** — every tool call (tool name, arguments, result summary, timestamp, LLM session ID) is written to the AI audit log alongside the existing per-call audit records from other patterns.
+- **Connection via Claude Desktop MCP config** — a municipality can connect Claude Desktop to their Umbraco site's MCP endpoint by adding a single entry to their `claude_desktop_config.json`, with no coding required.
+
+### Architectural observation
+This pattern crosses a fundamental boundary. Every previous pattern has a human in the request path: the editor clicks a button, reviews a result, and decides whether to publish. Here the LLM can traverse the entire content tree and make multiple writes before a human sees anything. The review gate (unpublished drafts, approval queue) is the only architectural boundary preventing unchecked mutation. This is the thesis's argument for why the approval gate is not a UX nicety but a load-bearing safety constraint — and why this pattern is positioned as the frontier of AI-in-CMS rather than a routine feature.
 
 ---
 
@@ -451,4 +479,4 @@ These are deliberately not implemented in the thesis demo but must be named for 
 
 ---
 
-*Last updated: Phase 7 (Generative Pipeline — Document → Content). Next: Phase 8 (Agent Tools — MCP).*
+*Last updated: Phase 8 (Agent Tools — MCP, L1). All eight phases complete.*
