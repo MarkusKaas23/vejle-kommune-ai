@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Umbraco.Cms.Core.Models;
 using Umbraco.Cms.Core.Services;
 using VejleKommune.Code.Features.Ai;
+using VejleKommune.Code.Features.Bootstrap;
 
 namespace VejleKommune.Code.Features.DocumentIngestion;
 
@@ -15,7 +16,7 @@ namespace VejleKommune.Code.Features.DocumentIngestion;
 /// creates a new unpublished newsArticle draft under the Nyheder list page.
 ///
 /// Pipeline steps:
-///   1. Resolve Nyheder parent node (newsListPage, key b517cfde-...) → int ID
+///   1. Resolve Nyheder parent node (newsListPage by DoctypeKeys.NewsListPage) → int ID
 ///   2. Build AiRequest with the document bytes as AiImage inline_data
 ///   3. Gemini extracts: headline, summary, body (HTML), publishedDate
 ///   4. Create IContent of type "newsArticle" under Nyheder
@@ -28,12 +29,6 @@ namespace VejleKommune.Code.Features.DocumentIngestion;
 /// </summary>
 public sealed class DocumentIngestionWorker : BackgroundService
 {
-    /// <summary>
-    /// Umbraco key for the Nyheder newsListPage node (set during content seeding).
-    /// New articles are created as children of this node.
-    /// </summary>
-    private static readonly Guid NyhederKey = new("b517cfde-dee4-4ae1-a8ce-bd734e0c6f94");
-
     private const string ContentTypeAlias = "newsArticle";
     private const string DefaultCulture = "da-DK";
 
@@ -89,13 +84,23 @@ public sealed class DocumentIngestionWorker : BackgroundService
     private async Task<Guid> IngestAsync(DocumentIngestionJob job, CancellationToken ct)
     {
         // ── Step 1: Resolve Nyheder parent node ──────────────────────────────
+        // Look up by content type key (DoctypeKeys.NewsListPage = bbbb0001-...) rather than
+        // by a hardcoded content-node GUID. The content type key is deterministic (set in
+        // DoctypeKeys), whereas the content node's key varies between database instances.
         await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
         IContentService contentService = scope.ServiceProvider.GetRequiredService<IContentService>();
+        IContentTypeService contentTypeService = scope.ServiceProvider.GetRequiredService<IContentTypeService>();
 
-        IContent? nyheder = contentService.GetById(NyhederKey);
+        IContentType? newsListType = contentTypeService.Get(DoctypeKeys.NewsListPage);
+        if (newsListType is null)
+            throw new InvalidOperationException("newsListPage content type not found. Ensure doctypes have been bootstrapped.");
+
+        IContent? nyheder = contentService
+            .GetPagedOfType(newsListType.Id, 0, 1, out _, null, null)
+            .FirstOrDefault();
+
         if (nyheder is null)
-            throw new InvalidOperationException(
-                $"Nyheder list node ({NyhederKey}) not found. Ensure content has been seeded.");
+            throw new InvalidOperationException("No newsListPage node found. Ensure content has been seeded.");
 
         int parentId = nyheder.Id;
 

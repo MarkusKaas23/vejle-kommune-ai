@@ -214,6 +214,30 @@ Rollback = trash or delete the newly created draft node. The document bytes are 
 - `publishedDate` is invariant (not culture-variant) per the `newsarticle.config` uSync definition — `SetValue("publishedDate", parsedDate)` without a culture argument.
 - The hint field (`DocumentIngestionRequest.Hint`) lets the caller pass editorial context (e.g. "Pressemeddelelse fra Teknik og Miljø") to the AI, improving extraction quality.
 - If Gemini cannot extract a meaningful headline (empty string), the job fails rather than creating a nameless node.
+- Parent node lookup uses `IContentTypeService.Get(DoctypeKeys.NewsListPage)` + `GetPagedOfType` rather than a hardcoded content-node GUID — the content type key is deterministic across database instances, the node key is not.
+
+### Extension surface and limitations
+
+The current implementation is intentionally scoped to one document type and four fields, but the underlying queue → worker → structured AI response → CMS write pipeline is generic. The natural extensions are:
+
+**Extensions worth building in a production package:**
+- **Any document type** — pass the target content type alias in the request and dynamically generate the JSON schema from the document type's property definitions at runtime. The AI extracts whatever fields that type declares.
+- **Multiple output nodes from one document** — a council minutes PDF can produce several draft articles (one per agenda item) by having Gemini return an array of content objects. The worker loops and creates one node per item.
+- **Document classification step** — a first Gemini call classifies the document (press release vs. policy paper vs. meeting minutes) and selects the right document type and parent node automatically, before the extraction call.
+- **Media extraction** — pull embedded images from the document, create Umbraco media items, and wire them to the `image` property on the draft node.
+- **DOCX support** — already works today: pass `application/vnd.openxmlformats-officedocument.wordprocessingml.document` as the MIME type. Gemini handles Word documents the same way as PDFs.
+- **Batch ingestion** — accept a list of documents in one request, queue one job per document, return a list of job IDs.
+- **Field-level confidence flags** — ask Gemini to return a confidence score alongside each extracted value. Low-confidence fields are highlighted in the field mapping preview so the editor knows where to focus their review.
+
+**Limitations that matter:**
+- **Scanned PDFs** — documents that are photographs of printed pages (no text layer) are read via Gemini's vision model, which is less reliable than text extraction. Quality degrades significantly on low-resolution or poorly scanned documents.
+- **Hardcoded four-field schema** — the current implementation extracts exactly `headline`, `summary`, `body`, and `publishedDate`. A production package must introspect the target document type and generate the schema dynamically.
+- **No per-field confidence** — Gemini returns best-guess values with no uncertainty signal. If the document is ambiguous about the publication date, the extracted date may be wrong with no indication.
+- **In-memory document bytes** — the document is held in memory only for the duration of the job. A server restart mid-job loses the document and the job fails. Production use requires persisting the document bytes (temp storage or blob store) until the job completes.
+- **AI is the sole author** — unlike Sync Suggestion patterns where the editor writes and the AI assists, here the AI authors all four fields. The review gate (unpublished draft) is the only human checkpoint. This is a higher-trust use of AI and requires editors to actually review before publishing rather than rubber-stamping.
+
+### Architectural observation
+This pattern represents a different human-AI split than all previous patterns. In Phases 1–3 the editor always has the keyboard and the AI makes suggestions. Here the AI is a *content factory*: the editor supplies a source document and reviews the output, but never types the article. The review gate (saved as unpublished) is what keeps the human in the loop despite the AI doing all the authoring. That distinction — AI as assistant vs. AI as author — is worth naming explicitly in the thesis.
 
 ---
 
