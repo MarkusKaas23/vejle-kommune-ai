@@ -295,16 +295,72 @@ Limbo.Umbraco.AI/
 └── docs/
 ```
 
+### Who is the customer? Two distinct deployment models
+
+This is a critical design decision that affects everything from the settings UI to the licensing model. There are two fundamentally different customer types, and the package must support both.
+
+---
+
+**Model A — Limbo-hosted AI (end-customer buys a managed service)**
+
+The customer is a municipality, public institution, or organisation. They are not IT people. They should never see an API key, a provider name, or a config file. They just want the features to work.
+
+In this model:
+- Limbo operates its own AI infrastructure (e.g. Azure OpenAI with a Danish DPA in place).
+- The package ships pre-configured to call **Limbo's own API gateway**, not a provider directly.
+- The customer authenticates to Limbo's gateway with a **license key** — one field in the backoffice settings page.
+- Limbo controls provider selection, rate limiting, failover, cost, and GDPR compliance centrally.
+- The customer pays Limbo on a subscription or usage basis. They never touch an API key.
+
+This is the right model for non-technical end customers. It also gives Limbo full control over the AI provider relationship, margins, and data governance.
+
+```
+[Umbraco site] → [Limbo AI Gateway] → [Azure OpenAI / Gemini / etc.]
+                        ↑
+                  Limbo manages:
+                  - provider selection
+                  - failover
+                  - rate limiting
+                  - DPA/GDPR
+                  - cost tracking
+```
+
+---
+
+**Model B — Bring Your Own Key (developer/agency installs the package)**
+
+The customer is a Umbraco developer or agency building a solution. They are technical. They have their own Azure OpenAI subscription or Gemini project, and they want to wire it in themselves.
+
+In this model:
+- The package ships with a **backoffice settings page** where the developer pastes their API endpoint, API key, and selects the model. No JSON files, no code changes.
+- Rate limiting, failover, and cost tracking are the developer's responsibility.
+- GDPR compliance depends on the provider and DPA the developer has in place.
+
+This is the right model for agencies and developers building custom solutions. It makes the package maximally flexible and self-hostable.
+
+```
+[Umbraco site] → [Azure OpenAI / Gemini] (developer's own subscription)
+```
+
+---
+
+**Recommended approach: ship both, default to Model A**
+
+The package should ship with Model A as the default (a Limbo license key is all that's needed to get started) and Model B as an advanced option (a "Use custom provider" toggle in settings that reveals the BYOK fields). This means:
+
+- Non-technical customers get a zero-configuration experience.
+- Technical customers and agencies get full control.
+- Limbo gets a recurring revenue stream from Model A customers while Model B drives developer adoption.
+
 ### Licensing options for commercial sale
 
 | Model | How it works | Best for |
 |---|---|---|
-| Per-module purchase | Each NuGet package has its own license key | Customers who want one feature |
-| Tiered bundle | Starter (Core + 2 features), Pro (all), Enterprise (all + support) | Simplifying the buying decision |
-| Subscription | Annual license covers all modules, key checked at startup | Recurring revenue, easier support |
-| Open Core | Core is MIT, feature modules are commercial | Community adoption + monetisation |
+| Managed service (Model A) | Customer pays Limbo per use or on subscription; Limbo operates the AI infrastructure | Municipalities, non-technical orgs |
+| BYOK license (Model B) | One-time or annual license key; customer supplies their own API key | Agencies, developers, self-hosters |
+| Open Core | Core is MIT, feature modules are commercial (either model) | Community adoption + monetisation |
 
-The **Open Core** model is worth considering: releasing `Limbo.Umbraco.AI.Core` as MIT encourages community adoption and third-party provider implementations, while the feature modules generate revenue. This is the model used by many successful developer tools.
+The **Open Core** model is worth considering for the BYOK tier: releasing `Limbo.Umbraco.AI.Core` as MIT encourages community adoption and third-party provider implementations, while the feature modules generate revenue. The managed service tier (Model A) remains fully commercial regardless.
 
 ---
 
@@ -324,16 +380,17 @@ The **Open Core** model is worth considering: releasing `Limbo.Umbraco.AI.Core` 
 
 ## L3 Concerns (Production — Out of Thesis Scope)
 
-These are deliberately not implemented in the thesis demo but must be named for the package roadmap:
+These are deliberately not implemented in the thesis demo but must be named for the package roadmap. Where relevant, the concern is tagged by which deployment model it applies to.
 
-- **Job queue durability** — in-memory queues are lost on restart. Use Hangfire + persistent store.
-- **Provider failover** — if Gemini is down, fall back to Azure OpenAI (or vice versa).
-- **Rate limiting** — per-editor and per-node request throttling to prevent quota exhaustion.
-- **Findings persistence** — accessibility findings currently in-memory; need a DB table with full history, dismissal audit trail, and "fixed" confirmation.
-- **Translation rollback UX** — currently rollback = unpublish/delete the en-US variant manually. A package should offer a one-click "Remove translation" action.
-- **Prompt versioning** — tone-of-voice prompts should be version-controlled with a change log, not just free-text fields.
-- **Cost budgets** — configurable per-feature monthly cost caps with automatic disable when exceeded.
-- **GDPR data residency** — configurable per-provider to enforce EU-only data routing.
+- **Job queue durability** — in-memory queues are lost on restart. Use Hangfire + persistent store. *(Both models)*
+- **Provider failover** — if the AI backend is unavailable, retry with backoff or surface a clear error. *(Model A: Limbo handles this centrally in the gateway. Model B: the integrating developer's responsibility.)*
+- **Rate limiting** — per-editor and per-node request throttling to prevent quota exhaustion. *(Model A: enforced at Limbo's gateway. Model B: developer configures limits in the backoffice settings page.)*
+- **Findings persistence** — accessibility findings currently in-memory; need a DB table with full history, dismissal audit trail, and "fixed" confirmation. *(Both models)*
+- **Translation rollback UX** — currently rollback = unpublish/delete the en-US variant manually. A package should offer a one-click "Remove translation" action. *(Both models)*
+- **Prompt versioning** — tone-of-voice prompts should be version-controlled with a change log, not just free-text fields. *(Both models)*
+- **Cost budgets** — configurable monthly cost caps with automatic disable when exceeded. *(Model A: Limbo enforces this per license/subscription. Model B: developer sets a cap in backoffice settings.)*
+- **GDPR data residency** — all data must stay in the EU for public sector customers. *(Model A: Limbo's responsibility — enforced by choosing an EU-hosted provider with a Danish/EU DPA. Model B: developer's responsibility — the settings UI should warn if a non-EU endpoint is configured.)*
+- **License key validation** — Model A customers authenticate with a Limbo license key; the package must validate it at startup and gracefully disable features if it lapses, without crashing the Umbraco site. *(Model A only)*
 
 ---
 
