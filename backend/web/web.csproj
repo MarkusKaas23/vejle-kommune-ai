@@ -9,9 +9,36 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.8" />
     <PackageReference Include="SeoToolkit.Umbraco.MetaFields" Version="6.3.0" />
-    <PackageReference Include="Umbraco.Cms" Version="17.0.0" />
-    <PackageReference Include="Umbraco.Cms.DevelopmentMode.Backoffice" Version="17.0.0" />
+    <!-- Umbraco.AI requires >= 17.4.0 -->
+    <PackageReference Include="Umbraco.Cms" Version="17.4.0" />
+    <PackageReference Include="Umbraco.Cms.DevelopmentMode.Backoffice" Version="17.4.0" />
     <PackageReference Include="uSync" Version="17.3.1" />
+    <!--
+      UMBRACO.AI — OpenAI-compatible provider routing Gemini through Google's OpenAI endpoint
+      ========================================================================================
+      All Google.GenAI versions (1.6.1–1.7.0) call set_Results on WebSearchToolResultContent,
+      a setter removed in M.E.AI 10.6.0. No compatible Google.GenAI version exists:
+        - 1.6.1: crashes with M.E.AI 10.6.0 (set_Results removed)
+        - 1.6.2+: changes Client..ctor in a way that breaks Umbraco.AI.Google 1.1.x
+      Using Umbraco.AI.OpenAI instead, pointed at Google's Gemini OpenAI-compatible endpoint:
+        https://generativelanguage.googleapis.com/v1beta/openai/
+      Same Gemini API key and billing — no OpenAI account needed.
+
+      TO REVISIT: When a Google.GenAI version is released that no longer calls set_Results,
+      switch back to Umbraco.AI.Google.
+    -->
+    <!-- Umbraco.AI: backoffice UI + Core + Persistence + SQLite migrations (all-in-one) -->
+    <PackageReference Include="Umbraco.AI.Startup" Version="1.13.0" />
+    <!-- Serves the @umbraco-ai/core JS module — required by the AI backoffice section -->
+    <PackageReference Include="Umbraco.AI.Web.StaticAssets" Version="1.13.0" />
+    <!-- OpenAI-compatible provider — routes Gemini calls via Google's /v1beta/openai/ endpoint -->
+    <PackageReference Include="Umbraco.AI.OpenAI" Version="1.2.4" />
+    <!-- Prompt templates — property-action dropdown next to text fields -->
+    <PackageReference Include="Umbraco.AI.Prompt" Version="1.8.7" />
+    <!-- Agent runtime + management API -->
+    <PackageReference Include="Umbraco.AI.Agent" Version="1.10.3" />
+    <!-- Copilot chat sidebar in backoffice -->
+    <PackageReference Include="Umbraco.AI.Agent.Copilot" Version="1.0.0" />
   </ItemGroup>
 
   <ItemGroup>
