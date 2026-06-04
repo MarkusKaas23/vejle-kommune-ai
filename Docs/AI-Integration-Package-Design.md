@@ -2,6 +2,8 @@
 
 > **Living document.** Updated after each build phase of the Vejle Kommune AI Pattern catalogue.
 > Purpose: serve as the design foundation for a future production-grade *Limbo.Umbraco.AI* package.
+>
+> **Target platform:** Umbraco 17 · .NET 10 · NuGet versioning follows Limbo's major = Umbraco major convention → initial release `17.0.0-alpha001`.
 
 ---
 
@@ -54,6 +56,35 @@ All current patterns send editorial prose to an external AI provider. For a muni
 
 ---
 
+## Pattern 0 — GEO Enrichment: Schema.org / JSON-LD
+
+### What it does
+Every published page emits one or more `<script type="application/ld+json">` blocks in the `<head>`. The renderer maps each Umbraco document type alias to a Schema.org type (`WebPage`, `NewsArticle`, `Event`, `GovernmentService`, `CollectionPage`, `WebSite`, `GovernmentOrganization`) and fills the structured data from the page's own properties at render time. This is **deterministic and AI-free at runtime** — Schema.org enrichment is pure design-time logic.
+
+The AI-adjacent dimension is twofold: (1) editors can set a `schemaTypeOverride` property to override the default mapping without a developer, and (2) an optional AI-assisted step can *suggest* the correct Schema.org type for novel document types by analysing the page content (not yet implemented but a natural extension).
+
+### Current implementation (L2)
+- `SchemaOrgRenderer` — sealed service injected into the view layer.
+- `BuildBlocks(page)` reads `schemaTypeOverride` first; if absent, falls through to `DefaultBlocks(page)` which switches on `ContentType.Alias`.
+- Doctype → Schema.org type map: `homePageAlias` → `WebSite` + `GovernmentOrganization`, `newsArticleAlias` → `NewsArticle`, `newsListPageAlias` / `eventListPageAlias` → `CollectionPage`, `eventAlias` → `Event` (with `startDate`, `endDate`, `location` → `Place`), `servicePageAlias` → `GovernmentService`, `contentPageAlias` (default) → `WebPage`.
+- Optional `additionalJsonLd` property on any page accepts a raw JSON object string for one-off structured data blocks.
+- Renderer is registered via `SeoComposer` and called from the Razor layout — no request-path AI calls.
+
+### Package design
+- Ship as a **standalone module** `Limbo.Umbraco.AI.SchemaEnrichment` (or potentially within `Limbo.Umbraco.Seo` — see integration note below).
+- **Document type → Schema type configuration** editable in a backoffice settings panel; the default map ships pre-populated.
+- **Schema.org type suggester** (optional, requires Core): a "Suggest type" button on the settings page sends the document type's property list to the AI and proposes the best Schema.org type — useful when editors create a new document type.
+- **Validation**: on save, validate that `additionalJsonLd` is well-formed JSON-LD (has `@type`, `@context`); show a warning if not.
+- **Integration with `Limbo.Umbraco.Seo`**: Limbo already publishes `Limbo.Umbraco.Seo` (v13, actively maintained). If an Umbraco 17 edition ships before this package, `SchemaEnrichment` should hook into it rather than duplicating SEO infrastructure. Monitor its release and design for optional dependency.
+
+### Key implementation notes
+- `IPublishedUrlProvider` is required for absolute URL generation — inject via constructor, not service locator.
+- `_variationContextAccessor.VariationContext?.Culture` may be null on non-culture-variant sites; always fall back to `LanguageBootstrap.Danish`.
+- `JavaScriptEncoder.UnsafeRelaxedJsonEscaping` is intentional — Schema.org values often include `&` and `>` characters that standard encoding would corrupt for crawlers.
+- `additionalJsonLd` must be parsed with `JsonNode.Parse`, not `JsonSerializer.Deserialize<object>` — the latter loses property order and type fidelity.
+
+---
+
 ## Pattern 1 — Sync Suggestion: SEO Meta Description
 
 ### What it does
@@ -66,8 +97,9 @@ When an editor opens the SEO tab of a content node, a button calls the AI to gen
 - Structured Gemini output via JSON schema (`title`, `metaDescription`, `openGraphTitle`, `openGraphDescription`).
 
 ### Package design
-- Ship as a **SeoToolkit adapter** — implement `IAIGenerationService` and register it. Editors get the existing SeoToolkit button with no additional UI work.
-- Alternatively, ship a standalone **Content App** tab on any document type, with a "Generate SEO fields" panel that shows a preview diff before applying.
+- **Primary integration: `Limbo.Umbraco.Seo`** — Limbo publishes its own `Limbo.Umbraco.Seo` package (currently at 13.1.1, 16k+ downloads). When an Umbraco 17 edition of that package ships, the AI SEO generation module should integrate natively with it, adding a "Generate with AI" capability to its existing UI. This is the preferred integration path for Limbo customers.
+- **Secondary integration: SeoToolkit adapter** — implement SeoToolkit's `IAIGenerationService` and register it. Editors get the existing SeoToolkit button with no additional UI work.
+- **Standalone fallback**: a **Content App** tab on any document type with a "Generate SEO fields" panel showing a preview diff before applying, for sites using neither Limbo.Umbraco.Seo nor SeoToolkit.
 - Configuration: which document types have SEO generation enabled, max character limits per field.
 
 ### Key implementation notes
@@ -288,16 +320,23 @@ A commercial package should allow customers to buy and install only what they ne
 NuGet package dependency graph:
 
 Limbo.Umbraco.AI                        ← Bundle (depends on all modules below)
-├── Limbo.Umbraco.AI.SeoGeneration
-├── Limbo.Umbraco.AI.AltText
-├── Limbo.Umbraco.AI.ToneOfVoice
-├── Limbo.Umbraco.AI.Translation
-├── Limbo.Umbraco.AI.Accessibility
-├── Limbo.Umbraco.AI.DocumentIngestion
-└── Limbo.Umbraco.AI.AgentTools
+├── Limbo.Umbraco.AI.SchemaEnrichment   ← Pattern 0 — deterministic, no AI at runtime
+├── Limbo.Umbraco.AI.SeoGeneration      ← Pattern 1
+├── Limbo.Umbraco.AI.AltText            ← Pattern 2
+├── Limbo.Umbraco.AI.ToneOfVoice        ← Pattern 3
+├── Limbo.Umbraco.AI.Translation        ← Pattern 4
+├── Limbo.Umbraco.AI.Accessibility      ← Pattern 5
+├── Limbo.Umbraco.AI.DocumentIngestion  ← Pattern 6
+└── Limbo.Umbraco.AI.AgentTools         ← Pattern 7
       │
       └── (all depend on) Limbo.Umbraco.AI.Core
+
+External Limbo packages integrated (optional peer dependencies):
+├── Limbo.Umbraco.Seo          ← SeoGeneration + SchemaEnrichment adapt to this if installed
+└── Limbo.Umbraco.DevOps       ← Required by all modules (build tooling, manifest helpers)
 ```
+
+> **Version convention**: major version = Umbraco major version. All packages in this family start at `17.0.0-alpha001`. The bundle package `Limbo.Umbraco.AI` depends on exact minor/patch ranges of its modules, not `*`.
 
 **What each layer contains:**
 
@@ -379,6 +418,146 @@ Limbo.Umbraco.AI/
 └── docs/
 ```
 
+### Limbo Package Conventions
+
+Every module in the Limbo.Umbraco ecosystem follows a three-file boilerplate pattern. Each module in `Limbo.Umbraco.AI` must follow the same convention for consistency and so Umbraco's package telemetry and manifest system works correctly.
+
+**File 1: `{ModuleName}Package.cs`** — static identity class
+
+```csharp
+namespace Limbo.Umbraco.AI.Core;
+
+public static class LimboUmbracoAiCorePackage
+{
+    public const string Alias = "Limbo.Umbraco.AI.Core";
+    public const string Name = "Limbo AI Core";
+    public const string Version = "17.0.0";
+
+    // Parsed once at startup — cached for manifest use.
+    public static readonly SemVersion SemVersion = SemVersion.Parse(Version);
+}
+```
+
+**File 2: `{ModuleName}Composer.cs`** — DI registration entry point
+
+```csharp
+namespace Limbo.Umbraco.AI.Core;
+
+[ComposeAfter(typeof(CoreComposer))]
+public sealed class LimboUmbracoAiCoreComposer : IComposer
+{
+    public void Compose(IUmbracoBuilder builder)
+    {
+        builder.ManifestFilters().Append<LimboUmbracoAiCoreManifestFilter>();
+        // Register IAiProvider, AuditingAiProvider, providers, options, etc.
+    }
+}
+```
+
+**File 3: `{ModuleName}ManifestFilter.cs`** — Umbraco package manifest registration
+
+```csharp
+namespace Limbo.Umbraco.AI.Core;
+
+internal sealed class LimboUmbracoAiCoreManifestFilter : IManifestFilter
+{
+    public void Filter(List<PackageManifest> manifests)
+    {
+        manifests.Add(new PackageManifest
+        {
+            AllowPackageTelemetry = true,
+            PackageName = LimboUmbracoAiCorePackage.Name,
+            Version = LimboUmbracoAiCorePackage.SemVersion.ToString(),
+            PackageId = LimboUmbracoAiCorePackage.Alias,
+            BundleOptions = BundleOptions.Independent,
+        });
+    }
+}
+```
+
+**`IUmbracoBuilder` extension methods** — the idiomatic registration API (one per module):
+
+```csharp
+public static class UmbracoBuilderExtensions
+{
+    // Limbo.Umbraco.AI.Core — always required
+    public static IUmbracoBuilder AddLimboAi(this IUmbracoBuilder builder, Action<LimboAiOptions>? configure = null) { ... }
+
+    // Per-module opt-in (developer installs only what they need)
+    public static IUmbracoBuilder AddLimboAiAltText(this IUmbracoBuilder builder) { ... }
+    public static IUmbracoBuilder AddLimboAiToneOfVoice(this IUmbracoBuilder builder, Action<ToneOfVoiceOptions>? configure = null) { ... }
+    public static IUmbracoBuilder AddLimboAiTranslation(this IUmbracoBuilder builder) { ... }
+    public static IUmbracoBuilder AddLimboAiAccessibility(this IUmbracoBuilder builder) { ... }
+    public static IUmbracoBuilder AddLimboAiDocumentIngestion(this IUmbracoBuilder builder) { ... }
+    public static IUmbracoBuilder AddLimboAiAgentTools(this IUmbracoBuilder builder, Action<AgentToolsOptions>? configure = null) { ... }
+    public static IUmbracoBuilder AddLimboAiSchemaEnrichment(this IUmbracoBuilder builder) { ... }
+    public static IUmbracoBuilder AddLimboAiSeoGeneration(this IUmbracoBuilder builder) { ... }
+}
+```
+
+A developer integrating the full bundle calls just `builder.AddLimboAi()` in `Program.cs`. A developer installing only translation calls `builder.AddLimboAi().AddLimboAiTranslation()`.
+
+**`.csproj` template** — each module project follows this structure:
+
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <VersionPrefix>17.0.0-alpha001</VersionPrefix>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <PackageId>Limbo.Umbraco.AI.Core</PackageId>
+    <Authors>Limbo</Authors>
+    <Company>Limbo</Company>
+    <Title>Limbo AI Core</Title>
+    <Description>Core AI provider abstraction for Umbraco. Required by all Limbo.Umbraco.AI modules.</Description>
+    <PackageTags>Skybrud;Limbo;Umbraco;AI;Umbraco-Marketplace</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/limbo-works/Limbo.Umbraco.AI</PackageProjectUrl>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/limbo-works/Limbo.Umbraco.AI</RepositoryUrl>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Limbo.Umbraco.DevOps" Version="17.0.0" />
+    <PackageReference Include="Skybrud.Essentials" Version="1.1.57" />
+    <PackageReference Include="Umbraco.Cms.Core" Version="[17.0.0,17.999)" />
+    <PackageReference Include="Umbraco.Cms.Web.BackOffice" Version="[17.0.0,17.999)" />
+  </ItemGroup>
+</Project>
+```
+
+Key points: `Umbraco-Marketplace` tag is required for Umbraco's package marketplace listing. `Limbo.Umbraco.DevOps` 17.0.0 targets net10.0 and is confirmed compatible. `Skybrud.Essentials` provides string, JSON, date, and enum utilities used across the Limbo ecosystem — use it rather than reimplementing common helpers.
+
+**GitHub Actions CI** — trigger release on tag push, same pattern as Limbo.Umbraco.Core:
+
+```yaml
+name: .NET Release
+on:
+  push:
+    tags: ['**']
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+          source-url: https://nuget.pkg.github.com/limbo-works/index.json
+        env:
+          NUGET_AUTH_TOKEN: ${{secrets.NUGET_TOKEN}}
+      - run: dotnet pack src/Limbo.Umbraco.AI/Limbo.Umbraco.AI.csproj --configuration Release --output out
+      - run: dotnet nuget push out/*.nupkg --api-key ${{secrets.NUGET_TOKEN}} --skip-duplicate --no-symbols
+```
+
+Each module gets its own pack step; the bundle project packs last with only project references.
+
+---
+
 ### Who is the customer? Two distinct deployment models
 
 This is a critical design decision that affects everything from the settings UI to the licensing model. There are two fundamentally different customer types, and the package must support both.
@@ -452,14 +631,16 @@ The **Open Core** model is worth considering for the BYOK tier: releasing `Limbo
 
 | Feature | Extension type | Notes |
 |---|---|---|
-| SEO generation button | SeoToolkit `IAIGenerationService` | Native — no custom UI |
+| Schema.org JSON-LD | Render-time service (no UI by default) | Optional: doctype→type map editor in Settings section |
+| SEO generation button | `Limbo.Umbraco.Seo` adapter or SeoToolkit `IAIGenerationService` | Prefer Limbo.Umbraco.Seo integration when U17 edition ships |
 | Alt text button | Media Content App (Vite/Lit) | Custom panel on Image media type |
 | Tone-of-voice gate | `INotificationAsyncHandler` | No UI — inline publish error message |
-| Translation panel | Document Content App | Language dropdown + status badge |
-| Accessibility panel | Document Content App | Findings list + dismiss |
-| Document ingestion | Custom section or Content App | Upload widget + field preview + draft creation |
-| Audit log | Custom Dashboard section | Table + CSV export |
-| Settings | Custom section or Settings tree node | Tone policy editor, provider config |
+| Translation panel | Document Content App (Vite/Lit) | Language dropdown + job status badge |
+| Accessibility panel | Document Content App (Vite/Lit) | Findings list with severity icons + dismiss |
+| Document ingestion | Custom section or Document Content App | Upload widget + field mapping preview + draft creation link |
+| MCP agent tools | No backoffice UI at L1 | L2: approval queue dashboard (Custom section) |
+| Audit log | Custom Dashboard section | Table filterable by pattern/date/node + CSV export |
+| Settings | Settings tree node | Tone policy editor, provider config, doctype→schema type map |
 
 ---
 
@@ -479,4 +660,4 @@ These are deliberately not implemented in the thesis demo but must be named for 
 
 ---
 
-*Last updated: Phase 8 (Agent Tools — MCP, L1). All eight phases complete.*
+*Last updated: Package conventions, Limbo.Umbraco.Seo integration, Schema.org pattern (Pattern 0) and versioning decisions added after NuGet research (Limbo.Umbraco.DevOps 17.0.0 confirmed, Limbo.Umbraco.Seo identified as peer integration target). All eight build phases complete.*
