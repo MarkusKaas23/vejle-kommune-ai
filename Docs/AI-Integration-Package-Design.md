@@ -660,4 +660,176 @@ These are deliberately not implemented in the thesis demo but must be named for 
 
 ---
 
-*Last updated: Package conventions, Limbo.Umbraco.Seo integration, Schema.org pattern (Pattern 0) and versioning decisions added after NuGet research (Limbo.Umbraco.DevOps 17.0.0 confirmed, Limbo.Umbraco.Seo identified as peer integration target). All eight build phases complete.*
+## Limbo Custom Agent Tools — `SetBlockListItemValue`
+
+### Background
+
+Live testing on 2026-06-04 (ADR-0013) established that Umbraco.AI Copilot handles the following out of the box — no custom tooling required:
+
+- Reading flat properties on the current node
+- Reading nested block list items (any depth)
+- Traversing content picker / multi-node tree picker references to other nodes
+- Understanding the shared/global element concept and warning the editor before editing
+
+The single confirmed gap is **block-list-item-level writes**. The built-in `set_value` tool targets a property by alias and replaces the entire value. It cannot mutate one item at index N inside a block list's JSON structure. This means Copilot can tell an editor *what* is in an accordion but cannot make the edit for them.
+
+### The tool
+
+```csharp
+[AITool(
+    "set_block_list_item_value",
+    "Set the value of a single property on a specific item inside a Block List",
+    Category = "Limbo")]
+public sealed class SetBlockListItemValueTool
+    : AIToolBase<SetBlockListItemValueArgs>
+{
+    private readonly IContentService _contentService;
+    private readonly ILogger<SetBlockListItemValueTool> _logger;
+
+    public SetBlockListItemValueTool(
+        IContentService contentService,
+        ILogger<SetBlockListItemValueTool> logger)
+    {
+        _contentService = contentService;
+        _logger = logger;
+    }
+
+    public override string Description =>
+        "Updates a single field on one item inside a Block List property. " +
+        "Use this when set_value fails on a nested block item. " +
+        "If the target node is different from the current page, the user should be " +
+        "warned that the change will affect every page that references that content.";
+
+    protected override async Task<object> ExecuteAsync(
+        SetBlockListItemValueArgs args,
+        CancellationToken ct)
+    {
+        IContent? content = _contentService.GetById(args.NodeKey);
+        if (content is null)
+            return new { success = false, error = $"Node {args.NodeKey} not found." };
+
+        IProperty? property = content.GetProperty(args.PropertyAlias);
+        if (property is null)
+            return new { success = false, error = $"Property '{args.PropertyAlias}' not found." };
+
+        string? raw = property.GetValue()?.ToString();
+        if (string.IsNullOrWhiteSpace(raw))
+            return new { success = false, error = "Property has no value." };
+
+        // Deserialise the block list
+        using var doc = JsonDocument.Parse(raw);
+        var root = doc.RootElement.Clone();
+
+        // Locate contentData[args.ItemIndex] and mutate args.FieldAlias = args.Value
+        // then re-serialise and write back
+        var updated = MutateBlockItem(root, args.ItemIndex, args.FieldAlias, args.Value);
+        if (updated is null)
+            return new { success = false, error = $"Block item at index {args.ItemIndex} not found." };
+
+        property.SetValue(updated);
+        _contentService.Save(content);
+
+        _logger.LogInformation(
+            "SetBlockListItemValue: node={NodeKey} property={Property} index={Index} field={Field}",
+            args.NodeKey, args.PropertyAlias, args.ItemIndex, args.FieldAlias);
+
+        return new { success = true, message = $"Updated '{args.FieldAlias}' on item {args.ItemIndex}." };
+    }
+
+    private static string? MutateBlockItem(
+        JsonElement root, int itemIndex, string fieldAlias, string newValue)
+    {
+        // Block list JSON structure:
+        // {
+        //   "layout": { "Umbraco.BlockList": [ { "contentUdi": "umb://element/..." }, ... ] },
+        //   "contentData": [ { "contentTypeAlias": "...", "udi": "...", "<fieldAlias>": "<value>" }, ... ]
+        // }
+        if (!root.TryGetProperty("contentData", out var contentData))
+            return null;
+
+        var items = contentData.EnumerateArray().ToList();
+        if (itemIndex < 0 || itemIndex >= items.Count)
+            return null;
+
+        // Rebuild contentData with the mutated item
+        var mutatedItems = items.Select((item, i) =>
+        {
+            if (i != itemIndex) return item;
+
+            var dict = item.EnumerateObject()
+                .ToDictionary(p => p.Name, p => (object?)p.Value.GetRawText());
+            dict[fieldAlias] = $"\"{newValue}\"";  // simple string value
+            return dict;
+        }).ToList();
+
+        // Re-serialise the full block list with the mutated contentData
+        // (full implementation would use System.Text.Json.Nodes for in-place editing)
+        return JsonSerializer.Serialize(new
+        {
+            layout = JsonSerializer.Deserialize<object>(
+                root.GetProperty("layout").GetRawText()),
+            contentData = mutatedItems
+        });
+    }
+}
+
+public sealed record SetBlockListItemValueArgs(
+    [property: Description("The Umbraco content node key (GUID) that owns the block list property. " +
+                           "If different from the current page, warn the editor before calling.")]
+    Guid NodeKey,
+
+    [property: Description("The property alias of the Block List on the content node (e.g. 'elementer', 'items').")]
+    string PropertyAlias,
+
+    [property: Description("Zero-based index of the block item to update (0 = first item).")]
+    int ItemIndex,
+
+    [property: Description("The field alias within the block item's element type to update (e.g. 'title', 'body').")]
+    string FieldAlias,
+
+    [property: Description("The new plain-text value for the field.")]
+    string Value);
+```
+
+### Registration
+
+```csharp
+// In Limbo.Umbraco.AI composer or the integrating project's composer:
+builder.AITools().Add<SetBlockListItemValueTool>();
+```
+
+Auto-discovery via `[AITool]` attribute also works if scanning is enabled in the Umbraco.AI configuration.
+
+### How the agent uses it
+
+When the editor asks Copilot to rewrite an accordion title and `set_value` fails, the agent should fall back to this tool automatically because its description explains exactly when to use it. A well-configured system prompt (in the Umbraco.AI Agent context) can make this explicit:
+
+> *"If set_value fails on a property inside a block list, use set_block_list_item_value instead. Always pass the node key of the content node that owns the block list — this may be different from the current page if the block list belongs to a referenced global element."*
+
+### Shared content guard
+
+The tool description instructs the agent to warn the editor when `NodeKey` differs from the current page's node key. For a stronger guarantee, add an `IsSharedContent` check in `ExecuteAsync` and return a structured prompt before writing:
+
+```csharp
+if (args.NodeKey != _contextNodeKey)
+    return new {
+        requiresConfirmation = true,
+        message = $"This block item belongs to a shared element used on multiple pages. " +
+                  $"Editing it will affect every page that references it. Confirm to proceed."
+    };
+```
+
+The agent will surface this message to the editor and wait for explicit approval before calling the tool a second time with a `confirmed = true` flag.
+
+### What this does NOT cover
+
+- Adding or removing block items (requires a separate `AddBlockListItem` / `RemoveBlockListItem` tool)
+- Writing rich text (HTML) values — the current implementation writes plain text; RTE values need HTML wrapping and Umbraco's block list value converter to accept them
+- Media picker fields inside blocks — these require UDI resolution, not plain string values
+- Block Grid (different JSON structure from Block List — a `SetBlockGridItemValue` variant is needed)
+
+These are Phase 2+ additions. The single `SetBlockListItemValue` tool closes the confirmed gap from ADR-0013.
+
+---
+
+*Last updated: ADR-0013 findings (2026-06-04) — Copilot block list read/write boundary tested, SetBlockListItemValue tool designed, Limbo custom tools section added.*

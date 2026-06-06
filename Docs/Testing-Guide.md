@@ -474,4 +474,70 @@ Aggregated usage statistics: calls per day, token consumption by profile, averag
 
 ---
 
+## 12 — Copilot: nested blocks and global elements (ADR-0013)
+
+This test section was added after live testing on 2026-06-04. It covers the Copilot's read/write boundary for nested Block List content and the Limbo global element pattern. See `docs/adr/0013-copilot-block-list-write-gap.md` for the full decision record.
+
+### Schema set up in the demo
+
+Three new document types and two new data types were created via uSync to reproduce a realistic Limbo client content structure:
+
+| Type | Alias | Purpose |
+|---|---|---|
+| Element type | `accordionItem` | Single panel: `title` (TextBox) + `body` (RichText) |
+| Element type | `accordionBlock` | Inline block: `heading` + `items` (Block List of accordionItem) |
+| Element type | `accordionGlobalElement` | Standalone global node: `titel` + `elementer` (Block List of accordionItem) |
+| Content type | `accordionGlobalFolder` | Container allowed at content root; holds global element nodes |
+| Data type | `Accordion Items Block List` | Block List allowing accordionItem |
+| Data type | `Modules Block List` | Block List allowing textBlock + accordionBlock (added to Content Page) |
+
+The `contentPage` document type was also updated with a `modules` (Modules Block List) property and a `referencedAccordions` (Multi-Node Tree Picker → accordionGlobalElement) property.
+
+### Content to create before testing
+
+1. Under the content root, create an **Accordion Global Folder** named `Globale accordions`
+2. Inside it, create an **Accordion Global Element** with:
+   - Titel: `Om Vejle Kommune`
+   - Elementer: 3 Accordion Items with real Danish titles and body text
+3. Open **Om Vejle Kommune** (Content Page) → **Referenced Accordions** → pick the global element above → save and publish
+4. Open any Content Page → **Modules** → add an Accordion Block with 2–3 items
+
+### Test A — Copilot on the global element node directly
+
+1. Navigate to `Globale accordions → Om Vejle Kommune: Accordion`
+2. Open Copilot
+3. Ask: *"Hvad er indholdet i denne accordion?"*
+4. **Expected:** Copilot reads all nested item titles and body text ✅
+5. Ask: *"Omskriv den første accordion-titel så den lyder mere indbydende"*
+6. **Expected:** `set_value` is called and fails — Copilot reports it cannot update nested block items ❌
+
+This confirms the write gap: reading nested block content works, writing to a specific item does not.
+
+### Test B — Copilot on the Content Page with a picker reference
+
+1. Navigate to **Om Vejle Kommune** (Content Page)
+2. Open Copilot
+3. Ask: *"Hvad er indholdet i de refererede accordions på denne side? Vis mig titlerne på alle accordion-elementerne."*
+4. **Expected:** Copilot calls `get_umbraco_content` automatically and returns all 3 item titles ✅
+5. Ask: *"Ændre den første titel til: 'Hvem er Vejle Kommune'"*
+6. **Expected:** Copilot warns this is shared content, asks for confirmation, then fails with `set_value` ❌ and correctly directs the editor to navigate to the global element manually
+
+### What `SetBlockListItemValueTool` does (and doesn't do yet)
+
+A custom Umbraco.AI tool `SetBlockListItemValueTool` is registered in `backend/code/Features/AgentTools/SetBlockListItemValueTool.cs`. It correctly mutates a specific block item's field in the JSON and writes it back via `IContentService`.
+
+However, the Copilot's `auto` agent operates with a hardcoded frontend tool set and does not pick up tools registered via `builder.AITools()`. The tool is available to **named agents** (AI → Agents) but not to the built-in Copilot sidebar. This is documented in ADR-0013 and is the planned focus for Limbo.Umbraco.AI Phase 2 (a TypeScript/Lit frontend tool handler).
+
+To manually verify the tool is registered, check the application startup log for `LimboToolsComposer` or call:
+```
+GET https://localhost:44337/umbraco/management/api/v1/ai/tools
+```
+`set_block_list_item_value` should appear in the response.
+
+### Tone-of-voice gate fix (also in this session)
+
+The `ToneOfVoiceGate` was updated to skip Block List JSON values and UDI picker values. Without this fix the gate evaluated raw JSON blobs as editorial prose and blocked every publish containing a block list property. The fix is in `backend/code/Features/ToneOfVoice/ToneOfVoiceGate.cs` — values starting with `{`, `[`, `umb://`, or `http` are now skipped before the AI call.
+
+---
+
 *Base URL for all endpoints: `https://localhost:44337`*
