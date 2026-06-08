@@ -89,15 +89,13 @@ public sealed class DocumentIngestionWorker : BackgroundService
         // DoctypeKeys), whereas the content node's key varies between database instances.
         await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
         IContentService contentService = scope.ServiceProvider.GetRequiredService<IContentService>();
-        IContentTypeService contentTypeService = scope.ServiceProvider.GetRequiredService<IContentTypeService>();
 
-        IContentType? newsListType = contentTypeService.Get(DoctypeKeys.NewsListPage);
-        if (newsListType is null)
-            throw new InvalidOperationException("newsListPage content type not found. Ensure doctypes have been bootstrapped.");
-
-        IContent? nyheder = contentService
-            .GetPagedOfType(newsListType.Id, 0, 1, out _, null, null)
-            .FirstOrDefault();
+        // Find the Nyheder newsListPage node by traversing root children and matching
+        // content type alias. Avoids GetPagedOfType whose filter param is non-nullable.
+        IContent? nyheder = contentService.GetRootContent()
+            .SelectMany(root => contentService.GetPagedChildren(root.Id, 0, 100, out _))
+            .FirstOrDefault(n => n.ContentType.Alias.Equals(
+                DoctypeKeys.NewsListPageAlias, StringComparison.OrdinalIgnoreCase));
 
         if (nyheder is null)
             throw new InvalidOperationException("No newsListPage node found. Ensure content has been seeded.");
