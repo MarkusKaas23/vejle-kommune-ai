@@ -89,6 +89,11 @@ public sealed class ToneOfVoiceGate : INotificationAsyncHandler<ContentPublishin
 
                 AiResponse response = await _aiProvider.CompleteAsync(request, cancellationToken);
 
+                _logger.LogInformation(
+                    "ToneOfVoiceGate raw AI response for {ContentName}: {Response}",
+                    content.Name,
+                    response.Content);
+
                 result = JsonSerializer.Deserialize<ToneCheckResult>(
                     response.Content,
                     new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
@@ -104,7 +109,9 @@ public sealed class ToneOfVoiceGate : INotificationAsyncHandler<ContentPublishin
                 continue;
             }
 
-            if (result is { Passes: false })
+            // Require a non-null reason — a missing reason means the AI response
+            // was malformed or incomplete. Fail open in that case.
+            if (result is { Passes: false, Reason: not null })
             {
                 string suggestions = result.Suggestions is { Count: > 0 }
                     ? " Forslag: " + string.Join("; ", result.Suggestions)
@@ -158,6 +165,17 @@ public sealed class ToneOfVoiceGate : INotificationAsyncHandler<ContentPublishin
                 raw = property.GetValue()?.ToString();
 
             if (string.IsNullOrWhiteSpace(raw))
+                continue;
+
+            // Skip block list / block grid JSON — raw JSON cannot be tone-evaluated
+            // and causes the gate to always return false for block properties.
+            string trimmed = raw.TrimStart();
+            if (trimmed.StartsWith('{') || trimmed.StartsWith('['))
+                continue;
+
+            // Skip UDI values from content/media pickers (e.g. umb://document/...)
+            // and any other URI-like technical values.
+            if (trimmed.StartsWith("umb://") || trimmed.StartsWith("http"))
                 continue;
 
             // Strip HTML (rich text editors).
