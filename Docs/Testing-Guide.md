@@ -511,7 +511,7 @@ The `contentPage` document type was also updated with a `modules` (Modules Block
 5. Ask: *"Omskriv den første accordion-titel så den lyder mere indbydende"*
 6. **Expected:** `set_value` is called and fails — Copilot reports it cannot update nested block items ❌
 
-This confirms the write gap: reading nested block content works, writing to a specific item does not.
+This confirms the write gap for **nested** Block Lists (AccordionItem contains its own Block List). See Tests C and D below for the refined picture.
 
 ### Test B — Copilot on the Content Page with a picker reference
 
@@ -521,6 +521,33 @@ This confirms the write gap: reading nested block content works, writing to a sp
 4. **Expected:** Copilot calls `get_umbraco_content` automatically and returns all 3 item titles ✅
 5. Ask: *"Ændre den første titel til: 'Hvem er Vejle Kommune'"*
 6. **Expected:** Copilot warns this is shared content, asks for confirmation, then fails with `set_value` ❌ and correctly directs the editor to navigate to the global element manually
+
+### Test C — Block Grid (Hero Block, flat properties)
+
+1. Navigate to **Om Vejle Kommune** (Content Page) → **Page Grid** field → add a Hero Block with heading, subheading, body
+2. Open Copilot and ask: *"Hvad er indholdet i Page Grid på denne side?"*
+3. **Expected:** Copilot reads all block fields ✅
+4. Ask: *"Omskriv overskriften i Hero Blocken"*
+5. **Expected:** `set_value` is called and **succeeds** ✅ — Block Grid items have native path-based write support
+
+### Test D — Block List with flat element type (TextBlock)
+
+1. On the same Content Page → **Modules** field → add a Text Block with title and body
+2. Open Copilot and ask: *"Omskriv titlen på den første Text Block i Modules-feltet"*
+3. **Expected:** `set_value` is called and **succeeds** ✅ — flat Block List items (no nested blocks inside) are writable
+
+### Human-in-the-loop: Approve / Deny on save
+
+After any write, when Copilot calls `save`, the backoffice renders an **Approve** and **Deny** button before the save is committed. This is the built-in human control gate in Umbraco.AI.Agent.Copilot 1.0.0. Individual `set_value` writes happen immediately, but the final save requires explicit editor approval. No custom approval layer is needed in Limbo for the save step.
+
+### Summary: write capability by structure
+
+| Structure | Read | Write |
+|---|---|---|
+| Block Grid — any block | ✅ | ✅ |
+| Block List — flat element type | ✅ | ✅ |
+| Block List — item with nested Block List | ✅ | ❌ needs `SetBlockListItemValueTool` + frontend handler |
+| Referenced node (picker) properties | ✅ | ❌ scoped to current node |
 
 ### What `SetBlockListItemValueTool` does (and doesn't do yet)
 
