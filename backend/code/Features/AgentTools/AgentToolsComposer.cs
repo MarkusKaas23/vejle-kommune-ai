@@ -8,6 +8,9 @@ namespace VejleKommune.Code.Features.AgentTools;
 /// Phase 8 – Agent Tool (MCP).
 /// Registers UmbracoMcpTools as a scoped service (IContentService is scoped,
 /// so the tools class must be scoped too).
+///
+/// SetBlockListItemValueTool is registered separately in LimboToolsComposer
+/// in the web project, which has access to Umbraco.AI.Agent (AITools extension).
 /// </summary>
 public sealed class AgentToolsComposer : IComposer
 {
