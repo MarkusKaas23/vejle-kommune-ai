@@ -131,6 +131,30 @@ internal static class ContentSeed
             });
         }
 
+        var subsiteNewsList = CreatePublic(contentService, "Affald og Genbrug (subsite)", home.Id, DoctypeKeys.SubSiteNewsListPageAlias, c =>
+        {
+            c.SetValue("headline", "Subsite nyheder", Da);
+        });
+
+        var subsiteArticles = new[]
+        {
+            ("Ny sorteringsguide til affald", "Beboerne kan nu sortere i 10 fraktioner med den nye guide.", "Affald"),
+            ("Genbrugspladsen udvider åbningstider", "Fra 1. juli holder genbrugspladsen åbent til kl. 20 alle hverdage.", "Genbrug"),
+        };
+        for (int i = 0; i < subsiteArticles.Length; i++)
+        {
+            var (title, summary, category) = subsiteArticles[i];
+            CreatePublic(contentService, title, subsiteNewsList.Id, DoctypeKeys.SubSiteNewsArticleAlias, c =>
+            {
+                c.SetValue("headline", title, Da);
+                c.SetValue("publishedDate", DateTime.UtcNow.AddDays(-i));
+                c.SetValue("summary", summary, Da);
+                // body is a TextBox on the subsite type (intentional mismatch with newsArticle)
+                c.SetValue("body", summary, Da);
+                c.SetValue("subsiteCategory", category, Da);
+            });
+        }
+
         var settings = contentService.Create("Site settings", -1, DoctypeKeys.SiteSettingsAlias);
         settings.SetValue("siteName", "Vejle Kommune");
         settings.SetValue("organizationName", "Vejle Kommune");

@@ -32,7 +32,13 @@ internal static class DoctypeFactory
         var eventList = BuildEventListPage(helper, dt, compositions, templates, evt);
         await contentTypeService.CreateAsync(eventList, Constants.Security.SuperUserKey);
 
-        var home = BuildHomePage(helper, dt, compositions, templates, newsList, eventList, servicePage, contentPage);
+        var subsiteNewsArticle = BuildSubSiteNewsArticle(helper, dt);
+        await contentTypeService.CreateAsync(subsiteNewsArticle, Constants.Security.SuperUserKey);
+
+        var subsiteNewsList = BuildSubSiteNewsListPage(helper, dt, subsiteNewsArticle);
+        await contentTypeService.CreateAsync(subsiteNewsList, Constants.Security.SuperUserKey);
+
+        var home = BuildHomePage(helper, dt, compositions, templates, newsList, eventList, servicePage, contentPage, subsiteNewsList);
         await contentTypeService.CreateAsync(home, Constants.Security.SuperUserKey);
 
         var siteSettings = BuildSiteSettings(helper, dt);
@@ -47,7 +53,8 @@ internal static class DoctypeFactory
         IContentType newsList,
         IContentType eventList,
         IContentType servicePage,
-        IContentType contentPage)
+        IContentType contentPage,
+        IContentType subsiteNewsList)
     {
         var ct = NewPublic(helper, DoctypeKeys.HomePage, DoctypeKeys.HomePageAlias, "Home page", "Site root. Mapped to Schema.org WebSite + GovernmentOrganization (multi-block exception per ADR-0006).", "icon-home");
         ct.AllowedAsRoot = true;
@@ -64,6 +71,64 @@ internal static class DoctypeFactory
             new ContentTypeSort(eventList.Key, 1, eventList.Alias),
             new ContentTypeSort(servicePage.Key, 2, servicePage.Alias),
             new ContentTypeSort(contentPage.Key, 3, contentPage.Alias),
+            new ContentTypeSort(subsiteNewsList.Key, 4, subsiteNewsList.Alias),
+        };
+        return ct;
+    }
+
+    /// <summary>
+    /// Subsite news article — mirrors newsArticle but with deliberate differences to demo
+    /// the three conversion scenarios in ContentConverter:
+    ///   MATCHED      : headline, publishedDate, summary, image (same alias + same editor)
+    ///   TYPE MISMATCH: body (TextBox here vs TextArea on newsArticle — same alias, wrong type)
+    ///   UNMATCHED    : subsiteCategory (no equivalent on newsArticle)
+    /// </summary>
+    private static ContentType BuildSubSiteNewsArticle(IShortStringHelper helper, ResolvedDataTypes dt)
+    {
+        var ct = new ContentType(helper, -1)
+        {
+            Key = DoctypeKeys.SubSiteNewsArticle,
+            Alias = DoctypeKeys.SubSiteNewsArticleAlias,
+            Name = "Subsite news article",
+            Description = "Subsite variant of the main-site news article. Used to demo ContentConverter (ADR-0016).",
+            Icon = "icon-newspaper",
+            Variations = ContentVariation.Culture,
+        };
+
+        ct.AddPropertyGroup("article", "Article");
+        Add(ct, helper, dt.Textstring,    "headline",        "Headline",         "article", ContentVariation.Culture);
+        Add(ct, helper, dt.DateTimePicker,"publishedDate",   "Published date",   "article", ContentVariation.Nothing);
+        Add(ct, helper, dt.Textarea,      "summary",         "Summary",          "article", ContentVariation.Culture);
+        // Intentional type mismatch: newsArticle uses TextArea, subsite uses TextBox
+        Add(ct, helper, dt.Textstring,    "body",            "Body",             "article", ContentVariation.Culture);
+        Add(ct, helper, dt.MediaPicker,   "image",           "Image",            "article", ContentVariation.Nothing);
+        // Intentional unmatched property: no equivalent on newsArticle
+        Add(ct, helper, dt.Textstring,    "subsiteCategory", "Subsite category", "article", ContentVariation.Culture);
+
+        return ct;
+    }
+
+    private static ContentType BuildSubSiteNewsListPage(
+        IShortStringHelper helper,
+        ResolvedDataTypes dt,
+        IContentType subsiteNewsArticle)
+    {
+        var ct = new ContentType(helper, -1)
+        {
+            Key = DoctypeKeys.SubSiteNewsListPage,
+            Alias = DoctypeKeys.SubSiteNewsListPageAlias,
+            Name = "Subsite news list",
+            Description = "Subsite news listing. Children are veSubSiteNewsArticle nodes.",
+            Icon = "icon-list",
+            Variations = ContentVariation.Culture,
+        };
+
+        ct.AddPropertyGroup("listing", "Listing");
+        Add(ct, helper, dt.Textstring, "headline", "Headline", "listing", ContentVariation.Culture);
+
+        ct.AllowedContentTypes = new[]
+        {
+            new ContentTypeSort(subsiteNewsArticle.Key, 0, subsiteNewsArticle.Alias),
         };
         return ct;
     }

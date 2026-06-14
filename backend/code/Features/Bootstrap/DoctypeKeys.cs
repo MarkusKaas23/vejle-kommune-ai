@@ -16,6 +16,10 @@ internal static class DoctypeKeys
     public static readonly Guid ContentPage = new("bbbb0001-0000-0000-0000-000000000007");
     public static readonly Guid SiteSettings = new("bbbb0001-0000-0000-0000-000000000008");
 
+    // Subsite types — used to demo the Content Converter feature
+    public static readonly Guid SubSiteNewsArticle = new("bbbb0001-0000-0000-0000-000000000009");
+    public static readonly Guid SubSiteNewsListPage = new("bbbb0001-0000-0000-0000-000000000010");
+
     public static readonly Guid SelfServiceLinkElement = new("cccc0001-0000-0000-0000-000000000001");
     public static readonly Guid AccessibilityFindingElement = new("cccc0001-0000-0000-0000-000000000002");
 
@@ -46,6 +50,8 @@ internal static class DoctypeKeys
     public const string ServicePageAlias = "servicePage";
     public const string ContentPageAlias = "contentPage";
     public const string SiteSettingsAlias = "siteSettings";
+    public const string SubSiteNewsArticleAlias = "veSubSiteNewsArticle";
+    public const string SubSiteNewsListPageAlias = "veSubSiteNewsListPage";
 
     public const string SelfServiceLinkElementAlias = "selfServiceLink";
     public const string AccessibilityFindingElementAlias = "accessibilityFinding";
