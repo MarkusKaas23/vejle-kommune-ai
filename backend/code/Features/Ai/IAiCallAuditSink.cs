@@ -1,6 +1,2 @@
-namespace VejleKommune.Code.Features.Ai;
-
-public interface IAiCallAuditSink
-{
-    Task EmitAsync(AiCallAuditRecord record, CancellationToken cancellationToken = default);
-}
+// SUPERSEDED — replaced by Umbraco.AI's middleware/logging pipeline.
+// This file can be safely deleted.
