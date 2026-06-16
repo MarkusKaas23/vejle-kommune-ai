@@ -1,4 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
+  <ItemGroup>
+    <!-- Exclude the frontend source + node_modules from MSBuild scanning.
+         The compiled output (App_Plugins/**) is served as static files and
+         does not need to be included as project items. -->
+    <Content Remove="client\**" />
+    <None   Remove="client\**" />
+    <Compile Remove="client\**" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
