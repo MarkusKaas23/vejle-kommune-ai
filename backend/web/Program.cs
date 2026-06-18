@@ -37,4 +37,9 @@ app.UseUmbraco()
         u.UseWebsiteEndpoints();
     });
 
+// Explicitly map all attribute-routed [ApiController] classes (e.g. ContentConverterController).
+// Umbraco's built-in endpoint setup only maps backoffice/website routes; custom controllers
+// that live outside those areas need an explicit MapControllers() call.
+app.MapControllers();
+
 await app.RunAsync();
