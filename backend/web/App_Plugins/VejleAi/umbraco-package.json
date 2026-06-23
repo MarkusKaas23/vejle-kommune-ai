@@ -1,0 +1,19 @@
+{
+  "$schema": "../../umbraco-package-schema.json",
+  "name": "VejleAi",
+  "version": "1.0.0",
+  "extensions": [
+    {
+      "type": "entityBulkAction",
+      "alias": "VejleAi.ContentConverter.BatchConvert",
+      "name": "Batch Convert Content Type",
+      "api": "/App_Plugins/VejleAi/content-converter-batch.js",
+      "forEntityTypes": ["document"],
+      "weight": 200,
+      "meta": {
+        "label": "Convert",
+        "icon": "icon-shuffle"
+      }
+    }
+  ]
+}
