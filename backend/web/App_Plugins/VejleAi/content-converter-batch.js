@@ -64,46 +64,25 @@ async function _showDialog(selection) {
         </div>
     `;
 
-    // Wrap in uui-icon-registry-essential for the basic ~50 UUI icons.
-    // Then intercept any unresolved uui-icon-request events and proxy them
-    // to Umbraco's live umb-icon-registry (deep in shadow DOM) to get the
-    // full backoffice icon set. This avoids any shadow-DOM mounting complexity.
+    // Mount inside umb-backoffice (light DOM, no shadow root in Umbraco 17).
+    // This is critical: umb-icon uses Umbraco's context API which bubbles up
+    // through the DOM tree. Mounting inside umb-backoffice means our umb-icon
+    // elements share the same context providers as the rest of the backoffice.
+    // Mounting at document.body puts us outside the context tree → umb-icon renders nothing.
     _ensureStyles();
     const iconWrapper = document.createElement('uui-icon-registry-essential');
     iconWrapper.id = 'vejle-icon-wrapper';
     iconWrapper.appendChild(overlay);
-    document.body.appendChild(iconWrapper);
+    const _mountTarget = document.querySelector('umb-backoffice') ?? document.body;
+    _mountTarget.appendChild(iconWrapper);
 
-    // Proxy icon requests to Umbraco's real registry using CAPTURE phase so
-    // we run before uui-icon-registry-essential's bubble listener (and before
-    // any stopPropagation it might call).
-    // Debug: find icon-related elements from document level (umb-backoffice has no shadow root in Umbraco 17)
-    (function debugIconTree() {
-        function scan(root, depth, path) {
-            if (depth > 4) return;
-            for (const el of root.querySelectorAll('*')) {
-                const tag = el.tagName.toLowerCase();
-                if (tag.includes('icon') || tag.includes('registry')) {
-                    console.log('[VejleAi] found:', path + ' > ' + tag, '| shadowRoot:', !!el.shadowRoot);
-                }
-                if (el.shadowRoot) scan(el.shadowRoot, depth + 1, path + '>' + tag + '#SR');
-            }
-        }
-        scan(document, 0, 'document');
-    })();
-    const _cachedReg = _findUmbIconRegistry();
-    console.log('[VejleAi] umb-icon-registry found:', _cachedReg?.tagName ?? 'NOT FOUND');
+    // Bubble-phase logger: runs AFTER uui-icon-registry-essential has had a chance to resolve.
+    // Any icon still unresolved here is a candidate to add to _ICON_SVG_MAP.
     iconWrapper.addEventListener('uui-icon-request', (e) => {
-        if (e.svgString) return; // already resolved
-        if (!_cachedReg) return;
-        const temp = document.createElement('span');
-        _cachedReg.appendChild(temp);
-        const proxy = new Event('uui-icon-request', { bubbles: true, composed: true });
-        proxy.iconName = e.iconName;
-        temp.dispatchEvent(proxy);
-        temp.remove();
-        if (proxy.svgString) e.svgString = proxy.svgString;
-    }, true); // capture phase
+        if (!e.svgString) {
+            console.warn('[VejleAi] UNRESOLVED icon:', e.iconName);
+        }
+    });
 
     // DOM refs
     const pickerWrap = overlay.querySelector('#vejle-picker-wrap');
@@ -642,16 +621,43 @@ function _buildContentPicker(container, onChange) {
 /**
  * Return an HTML string for a document-type icon.
  *
- * Uses <umb-icon> (Umbraco 17's native icon element) which resolves icons
- * through Umbraco's internal context system — no dependency on umb-icon-registry
- * being reachable from our code. The `name` attribute uses the full "icon-xxx"
- * format as stored in Umbraco's database.
+ * Uses <uui-icon> via uui-icon-registry-essential for resolved icons.
+ * Falls back to a colored initial-letter badge for unresolved icons.
  */
 function _iconHtml(iconName, cssColor, size) {
-    // umb-icon expects the full "icon-xxx" name with prefix
-    const fullName = iconName.startsWith('icon-') ? iconName : `icon-${iconName}`;
-    return `<umb-icon name="${esc(fullName)}" style="color:${cssColor};width:${size}px;height:${size}px;display:inline-flex;flex-shrink:0;vertical-align:middle;"></umb-icon>`;
+    // Check inline SVG map first (for Umbraco-specific icons not in uui-icon-registry-essential)
+    const inlineSvg = _ICON_SVG_MAP[iconName];
+    if (inlineSvg) {
+        const col = cssColor || 'currentColor';
+        return `<span style="color:${col};width:${size}px;height:${size}px;display:inline-flex;flex-shrink:0;vertical-align:middle;align-items:center;justify-content:center;">${inlineSvg}</span>`;
+    }
+    return `<uui-icon name="${esc(iconName)}" style="color:${cssColor};width:${size}px;height:${size}px;display:inline-flex;flex-shrink:0;vertical-align:middle;"></uui-icon>`;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Inline SVG map — Umbraco-specific icons not in uui-icon-registry-essential
+// Add entries here as needed (names are WITHOUT the "icon-" prefix).
+// Run this in the browser console to find which names are missing:
+//   [...document.querySelectorAll('uui-icon')].forEach(el => console.log(el.name, el.shadowRoot?.querySelector('svg') ? '✓' : '✗'))
+// ─────────────────────────────────────────────────────────────────────────────
+const _ICON_SVG_MAP = {
+    'newspaper': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor" width="100%" height="100%"><path d="M496 128v16a8 8 0 0 1-8 8h-24v12c0 6.627-5.373 12-12 12H60c-6.627 0-12-5.373-12-12V48c0-6.627 5.373-12 12-12h340c6.627 0 12 5.373 12 12v68h24a8 8 0 0 1 8 8zm-60 198H76c-6.627 0-12 5.373-12 12v12c0 6.627 5.373 12 12 12h360c6.627 0 12-5.373 12-12v-12c0-6.627-5.373-12-12-12zm0-96H76c-6.627 0-12 5.373-12 12v12c0 6.627 5.373 12 12 12h360c6.627 0 12-5.373 12-12v-12c0-6.627-5.373-12-12-12zm0 192H76c-6.627 0-12 5.373-12 12v12c0 6.627 5.373 12 12 12h360c6.627 0 12-5.373 12-12v-12c0-6.627-5.373-12-12-12z"/></svg>`,
+    'home': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512" fill="currentColor" width="100%" height="100%"><path d="M280.37 148.26L96 300.11V464a16 16 0 0 0 16 16l112.06-.29a16 16 0 0 0 15.92-16V368a16 16 0 0 1 16-16h64a16 16 0 0 1 16 16v95.64a16 16 0 0 0 16 16.05L464 480a16 16 0 0 0 16-16V300L295.67 148.26a12.19 12.19 0 0 0-15.3 0zM571.6 251.47L488 182.56V44.05a12 12 0 0 0-12-12h-56a12 12 0 0 0-12 12v72.61L318.47 43a48 48 0 0 0-61 0L4.34 251.47a12 12 0 0 0-1.6 16.9l25.5 31A12 12 0 0 0 45.15 301l235.22-193.74a12.19 12.19 0 0 1 15.3 0L530.9 301a12 12 0 0 0 16.9-1.6l25.5-31a12 12 0 0 0-1.7-16.93z"/></svg>`,
+    'article': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" fill="currentColor" width="100%" height="100%"><path d="M224 136V0H24C10.7 0 0 10.7 0 24v464c0 13.3 10.7 24 24 24h336c13.3 0 24-10.7 24-24V160H248c-13.2 0-24-10.8-24-24zm64 236c0 6.6-5.4 12-12 12H76c-6.6 0-12-5.4-12-12v-8c0-6.6 5.4-12 12-12h200c6.6 0 12 5.4 12 12v8zm0-96c0 6.6-5.4 12-12 12H76c-6.6 0-12-5.4-12-12v-8c0-6.6 5.4-12 12-12h200c6.6 0 12 5.4 12 12v8zm0-96c0 6.6-5.4 12-12 12H76c-6.6 0-12-5.4-12-12v-8c0-6.6 5.4-12 12-12h200c6.6 0 12 5.4 12 12v8zm96-114.1V24c0-13.3-10.7-24-24-24H248v136h136c0-4.6-1.8-9.2-5.3-12.6z"/></svg>`,
+    'list-alt': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor" width="100%" height="100%"><path d="M464 480H48c-26.51 0-48-21.49-48-48V80c0-26.51 21.49-48 48-48h416c26.51 0 48 21.49 48 48v352c0 26.51-21.49 48-48 48zM128 120c-22.091 0-40 17.909-40 40s17.909 40 40 40 40-17.909 40-40-17.909-40-40-40zm0 96c-22.091 0-40 17.909-40 40s17.909 40 40 40 40-17.909 40-40-17.909-40-40-40zm0 96c-22.091 0-40 17.909-40 40s17.909 40 40 40 40-17.909 40-40-17.909-40-40-40zm288-136v-32c0-6.627-5.373-12-12-12H204c-6.627 0-12 5.373-12 12v32c0 6.627 5.373 12 12 12h200c6.627 0 12-5.373 12-12zm0 96v-32c0-6.627-5.373-12-12-12H204c-6.627 0-12 5.373-12 12v32c0 6.627 5.373 12 12 12h200c6.627 0 12-5.373 12-12zm0 96v-32c0-6.627-5.373-12-12-12H204c-6.627 0-12 5.373-12 12v32c0 6.627 5.373 12 12 12h200c6.627 0 12-5.373 12-12z"/></svg>`,
+    'folder': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor" width="100%" height="100%"><path d="M464 128H272l-64-64H48C21.49 64 0 85.49 0 112v288c0 26.51 21.49 48 48 48h416c26.51 0 48-21.49 48-48V176c0-26.51-21.49-48-48-48z"/></svg>`,
+    'picture': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor" width="100%" height="100%"><path d="M464 448H48c-26.51 0-48-21.49-48-48V112c0-26.51 21.49-48 48-48h416c26.51 0 48 21.49 48 48v288c0 26.51-21.49 48-48 48zM112 120c-30.928 0-56 25.072-56 56s25.072 56 56 56 56-25.072 56-56-25.072-56-56-56zM64 384h384v-112l-87.515-87.515c-4.686-4.686-12.284-4.686-16.971 0L208 320l-55.515-55.515c-4.686-4.686-12.284-4.686-16.971 0L64 336v48z"/></svg>`,
+    'accessibility': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor" width="100%" height="100%"><path d="M256 48c114.953 0 208 93.029 208 208 0 114.953-93.029 208-208 208-114.953 0-208-93.029-208-208 0-114.953 93.029-208 208-208m0-40C119.033 8 8 119.033 8 256s111.033 248 248 248 248-111.033 248-248S392.967 8 256 8zm0 56C149.961 64 64 149.961 64 256s85.961 192 192 192 192-85.961 192-192S362.039 64 256 64zm0 44c19.882 0 36 16.118 36 36s-16.118 36-36 36-36-16.118-36-36 16.118-36 36-36zm117.741 98.023c-28.374 6.007-56.689 11.646-82.741 13.769V280l21.427 128.899A12 12 0 0 1 300.655 424h-3.881a12 12 0 0 1-11.832-10.065L271 336h-30l-13.942 77.935A12 12 0 0 1 215.226 424h-3.881a12 12 0 0 1-11.973-13.101L221 280v-58.208c-26.052-2.123-54.367-7.762-82.741-13.769-8.104-1.717-13.259-9.71-11.542-17.814 1.717-8.104 9.71-13.259 17.814-11.542C181.658 187.887 218.832 192 256 192c37.168 0 74.342-4.113 111.469-12.123 8.104-1.717 16.097 3.438 17.814 11.542 1.716 8.104-3.439 16.097-11.542 17.814z"/></svg>`,
+    'tag': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor" width="100%" height="100%"><path d="M0 252.118V48C0 21.49 21.49 0 48 0h204.118a48 48 0 0 1 33.941 14.059l211.882 211.882c18.745 18.745 18.745 49.137 0 67.882L293.823 497.941c-18.745 18.745-49.137 18.745-67.882 0L14.059 286.059A48 48 0 0 1 0 252.118zM112 64c-26.51 0-48 21.49-48 48s21.49 48 48 48 48-21.49 48-48-21.49-48-48-48z"/></svg>`,
+    'link': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor" width="100%" height="100%"><path d="M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16 16 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16 16 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z"/></svg>`,
+    'user': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" fill="currentColor" width="100%" height="100%"><path d="M224 256c70.7 0 128-57.3 128-128S294.7 0 224 0 96 57.3 96 128s57.3 128 128 128zm89.6 32h-16.7c-22.2 10.2-46.9 16-72.9 16s-50.6-5.8-72.9-16h-16.7C60.2 288 0 348.2 0 422.4V464c0 26.5 21.5 48 48 48h352c26.5 0 48-21.5 48-48v-41.6c0-74.2-60.2-134.4-134.4-134.4z"/></svg>`,
+    'users': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512" fill="currentColor" width="100%" height="100%"><path d="M96 224c35.3 0 64-28.7 64-64s-28.7-64-64-64-64 28.7-64 64 28.7 64 64 64zm448 0c35.3 0 64-28.7 64-64s-28.7-64-64-64-64 28.7-64 64 28.7 64 64 64zm32 32h-64c-17.6 0-33.5 7.1-45.1 18.6 40.3 22.1 68.9 62 75.1 109.4h66c17.7 0 32-14.3 32-32v-32c0-35.3-28.7-64-64-64zm-256 0c61.9 0 112-50.1 112-112S381.9 32 320 32 208 82.1 208 144s50.1 112 112 112zm76.8 32h-8.3c-20.8 10-43.9 16-68.5 16s-47.6-6-68.5-16h-8.3C179.6 288 128 339.6 128 403.2V432c0 26.5 21.5 48 48 48h288c26.5 0 48-21.5 48-48v-28.8c0-63.6-51.6-115.2-115.2-115.2zm-223.7-13.4C161.5 263.1 145.6 256 128 256H64c-35.3 0-64 28.7-64 64v32c0 17.7 14.3 32 32 32h65.9c6.3-47.4 34.9-87.3 75.2-109.4z"/></svg>`,
+    'globe': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512" fill="currentColor" width="100%" height="100%"><path d="M336.5 160C322 70.7 287.8 8 248 8s-74 62.7-88.5 152h177zM152 256c0 22.2 1.2 43.5 3.3 64h185.3c2.1-20.5 3.3-41.8 3.3-64s-1.2-43.5-3.3-64H155.3c-2.1 20.5-3.3 41.8-3.3 64zm324.7-96c-28.6-67.9-86.5-120.4-158-141.6 24.4 33.8 41.2 84.7 50 141.6h108zM177.2 18.4C105.8 39.6 47.8 92.1 19.3 160h108c8.7-56.9 25.5-107.8 49.9-141.6zM487.4 192H372.7c2.1 21 3.3 42.5 3.3 64s-1.2 43-3.3 64h114.6c5.5-20.5 8.6-41.8 8.6-64s-3.1-43.5-8.5-64zM120 256c0-21.5 1.2-43 3.3-64H8.6C3.2 212.5 0 233.8 0 256s3.2 43.5 8.6 64h114.6c-2-21-3.2-42.5-3.2-64zm39.5 96c14.5 89.3 48.7 152 88.5 152s74-62.7 88.5-152h-177zm159.3 141.6c71.4-21.2 129.4-73.7 158-141.6h-108c-8.8 56.9-25.6 107.8-50 141.6zM19.3 352c28.6 67.9 86.5 120.4 158 141.6-24.4-33.8-41.2-84.7-50-141.6h-108z"/></svg>`,
+    'eye': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512" fill="currentColor" width="100%" height="100%"><path d="M572.52 241.4C518.29 135.59 410.93 64 288 64S57.68 135.64 3.48 241.41a32.35 32.35 0 0 0 0 29.19C57.71 376.41 165.07 448 288 448s230.32-71.64 284.52-177.41a32.35 32.35 0 0 0 0-29.19zM288 400a144 144 0 1 1 144-144 143.93 143.93 0 0 1-144 144zm0-240a95.31 95.31 0 0 0-25.31 3.79 47.85 47.85 0 0 1-66.9 66.9A95.78 95.78 0 1 0 288 160z"/></svg>`,
+    'list': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor" width="100%" height="100%"><path d="M80 368H16a16 16 0 0 0-16 16v64a16 16 0 0 0 16 16h64a16 16 0 0 0 16-16v-64a16 16 0 0 0-16-16zm0-320H16A16 16 0 0 0 0 64v64a16 16 0 0 0 16 16h64a16 16 0 0 0 16-16V64a16 16 0 0 0-16-16zm0 160H16a16 16 0 0 0-16 16v64a16 16 0 0 0 16 16h64a16 16 0 0 0 16-16v-64a16 16 0 0 0-16-16zm416 176H176a16 16 0 0 0-16 16v32a16 16 0 0 0 16 16h320a16 16 0 0 0 16-16v-32a16 16 0 0 0-16-16zm0-320H176a16 16 0 0 0-16 16v32a16 16 0 0 0 16 16h320a16 16 0 0 0 16-16V80a16 16 0 0 0-16-16zm0 160H176a16 16 0 0 0-16 16v32a16 16 0 0 0 16 16h320a16 16 0 0 0 16-16v-32a16 16 0 0 0-16-16z"/></svg>`,
+    'document-dashed': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" fill="currentColor" width="100%" height="100%"><path d="M369.9 97.9L286 14C277 5 264.8-.1 252.1-.1H48C21.5 0 0 21.5 0 48v416c0 26.5 21.5 48 48 48h288c26.5 0 48-21.5 48-48V131.9c0-12.7-5.1-25-14.1-34zM332.1 128H256V51.9l76.1 76.1zM48 464V48h160v104c0 13.3 10.7 24 24 24h104v288H48z"/></svg>`,
+    'settings': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor" width="100%" height="100%"><path d="M487.4 315.7l-42.6-24.6c4.3-23.2 4.3-47 0-70.2l42.6-24.6c4.9-2.8 7.1-8.6 5.5-14-11.1-35.6-30-67.8-54.7-94.6-3.8-4.1-10-5.1-14.8-2.3l-42.6 24.6c-17.9-15.4-38.5-27.3-60.8-35.1V25.8c0-5.7-4.1-10.6-9.8-11.7-36.3-6.8-73.8-6.9-110.5 0-5.6 1-9.8 6-9.8 11.7v49.2c-22.3 7.8-42.8 19.8-60.8 35.1L88.9 85.5c-4.9-2.8-11-1.9-14.8 2.3-24.7 26.7-43.6 58.9-54.7 94.6-1.7 5.4.6 11.2 5.5 14l42.6 24.6c-4.3 23.2-4.3 47 0 70.2L24.9 315.7c-4.9 2.8-7.1 8.6-5.5 14 11.1 35.6 30 67.8 54.7 94.6 3.8 4.1 10 5.1 14.8 2.3l42.6-24.6c17.9 15.4 38.5 27.3 60.8 35.1v49.2c0 5.7 4.1 10.6 9.8 11.7 36.3 6.8 73.8 6.9 110.5 0 5.6-1 9.8-6 9.8-11.7v-49.2c22.3-7.8 42.8-19.8 60.8-35.1l42.6 24.6c4.9 2.8 11 1.9 14.8-2.3 24.7-26.7 43.6-58.9 54.7-94.6 1.5-5.4-.7-11.2-5.6-14zM256 336c-44.1 0-80-35.9-80-80s35.9-80 80-80 80 35.9 80 80-35.9 80-80 80z"/></svg>`,
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
