@@ -4,10 +4,12 @@ export default defineConfig({
     build: {
         lib: {
             // Each feature gets its own entry → own output file.
-            // Add more entries here as we build more backoffice extensions.
-            entry: 'src/content-converter/index.ts',
+            // Use an object map so Vite names each output after its key.
+            entry: {
+                'content-converter': 'src/content-converter/index.ts',
+                'content-converter-batch': 'src/content-converter-batch/index.ts',
+            },
             formats: ['es'],
-            fileName: () => 'content-converter',
         },
         outDir: '../App_Plugins/VejleAi',
         // Do not wipe the whole folder — other extensions live alongside ours.
